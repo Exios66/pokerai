@@ -26,7 +26,13 @@ This project trains a neural network to predict poker actions (FOLD, CALL, RAISE
    pip install -r requirements.txt
    ```
 
-4. **Prepare your data**
+4. **Log in to Weights & Biases** (for experiment tracking)
+   ```bash
+   wandb login
+   ```
+   Training scripts log to the `pokerai` W&B project. Set `WANDB_MODE=disabled` to skip logging.
+
+5. **Prepare your data**
    - Place your poker hand history data in `data/hands.txt`
    - Each line should be a complete hand history in the format: `POSITION,STACK,CARDS,PLAYER_INFO,ACTION`
 
@@ -136,6 +142,18 @@ pokerAI/
 - **Bigram baseline**: Validation loss ~1.53
 - **GPT-2 model**: Expected to significantly outperform baseline
 - Compare final validation loss against baseline to assess improvement
+
+## Experiment Tracking (W&B)
+
+All training scripts log to the `pokerai` Weights & Biases project:
+
+| Script | Run name | Logged metrics |
+|--------|----------|----------------|
+| `train_bigram.py` | `bigram-baseline` | train/val loss, final val loss |
+| `build_model.py` | `gpt2-raw` | train/val loss per step/epoch |
+| `TRL_model.py` | `gpt2-trl` | HF Trainer metrics via `report_to="wandb"` |
+
+Hyperparameters (model size, LR, batch size, etc.) are logged as run config. View runs at [wandb.ai](https://wandb.ai) under the `pokerai` project.
 
 ## Notes
 

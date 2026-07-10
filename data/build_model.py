@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+import wandb
 from torch.utils.data import Dataset, DataLoader
 from transformers import GPT2TokenizerFast, GPT2Config, GPT2LMHeadModel
 from datasets import load_dataset
@@ -19,7 +20,8 @@ config = GPT2Config(
     pad_token_id=tokenizer.pad_token_id,
 )
 model = GPT2LMHeadModel(config)
-print(f"Model has {sum(p.numel() for p in model.parameters()):,} parameters")
+n_params = sum(p.numel() for p in model.parameters())
+print(f"Model has {n_params:,} parameters")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model.to(device)
@@ -63,8 +65,31 @@ def collate(batch):
 
 train_ds = HandsDataset(raw["train"])
 val_ds = HandsDataset(raw["test"])
-train_loader = DataLoader(train_ds, batch_size=32, shuffle=True, collate_fn=collate)
-val_loader = DataLoader(val_ds, batch_size=32, shuffle=False, collate_fn=collate)
+batch_size = 32
+lr = 3e-4
+num_epochs = 3
+train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate)
+val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, collate_fn=collate)
+
+wandb.init(
+    project="pokerai",
+    name="gpt2-raw",
+    config={
+        "model": "gpt2",
+        "n_params": n_params,
+        "n_positions": config.n_positions,
+        "n_embd": config.n_embd,
+        "n_layer": config.n_layer,
+        "n_head": config.n_head,
+        "vocab_size": vocab_size,
+        "batch_size": batch_size,
+        "learning_rate": lr,
+        "num_epochs": num_epochs,
+        "device": device,
+        "train_examples": len(train_ds),
+        "eval_examples": len(val_ds),
+    },
+)
 
 # ---- Sanity-check the masking on one real example ----
 ids, labels = train_ds[0]
@@ -73,7 +98,7 @@ print("Labels: ", [tokenizer.convert_ids_to_tokens([t])[0] if t != -100 else "--
 print("(Only non-'---' positions contribute to the loss -- verify that's just the decision.)\n")
 
 # ---- Raw training loop ----
-optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
+optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
 def run_eval():
     model.eval()
@@ -91,7 +116,7 @@ def run_eval():
     return total_loss / total_tokens
 
 step = 0
-for epoch in range(3):
+for epoch in range(num_epochs):
     for input_ids, labels, attn_mask in train_loader:
         input_ids, labels, attn_mask = input_ids.to(device), labels.to(device), attn_mask.to(device)
         logits = model(input_ids=input_ids, attention_mask=attn_mask).logits[:, :-1, :].contiguous()
@@ -104,10 +129,13 @@ for epoch in range(3):
 
         if step % 50 == 0:
             print(f"epoch {epoch} step {step:5d} | train loss {loss.item():.4f}")
+            wandb.log({"train/loss": loss.item(), "epoch": epoch}, step=step)
         step += 1
 
-    print(f"== end of epoch {epoch}: val loss {run_eval():.4f} ==")
+    val_loss = run_eval()
+    print(f"== end of epoch {epoch}: val loss {val_loss:.4f} ==")
+    wandb.log({"val/loss": val_loss, "epoch": epoch}, step=step)
 
 print("\nBigram baseline val loss was ~1.53 -- compare final val loss above to that.")
-
-
+wandb.summary["final_val_loss"] = val_loss
+wandb.finish()

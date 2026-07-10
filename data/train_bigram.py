@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import wandb
 from transformers import GPT2TokenizerFast
 from datasets import load_dataset
 
@@ -42,14 +43,30 @@ class Bigram(nn.Module):
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Training on:", device)
 
+batch_size = 4096
+n_steps = 2000
+lr = 1e-2
+
+wandb.init(
+    project="pokerai",
+    name="bigram-baseline",
+    config={
+        "model": "bigram",
+        "vocab_size": vocab_size,
+        "batch_size": batch_size,
+        "n_steps": n_steps,
+        "learning_rate": lr,
+        "device": device,
+        "train_pairs": len(train_x),
+        "val_pairs": len(val_x),
+    },
+)
+
 model = Bigram(vocab_size).to(device)
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
+optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
 train_x, train_y = train_x.to(device), train_y.to(device)
 val_x, val_y = val_x.to(device), val_y.to(device)
-
-batch_size = 4096
-n_steps = 2000
 
 for step in range(n_steps):
     idx = torch.randint(0, len(train_x), (batch_size,))
@@ -66,9 +83,14 @@ for step in range(n_steps):
         with torch.no_grad():
             val_loss = F.cross_entropy(model(val_x), val_y)
         print(f"step {step:5d} | train loss {loss.item():.4f} | val loss {val_loss.item():.4f}")
+        wandb.log(
+            {"train/loss": loss.item(), "val/loss": val_loss.item()},
+            step=step,
+        )
 
 random_baseline = math.log(vocab_size)
 print(f"\nRandom-guess baseline loss: {random_baseline:.4f}  (ln(vocab_size))")
 print(f"Bigram model final val loss: {val_loss.item():.4f}")
-
-
+wandb.summary["random_baseline_loss"] = random_baseline
+wandb.summary["final_val_loss"] = val_loss.item()
+wandb.finish()

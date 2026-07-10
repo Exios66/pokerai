@@ -1,4 +1,5 @@
 import torch
+import wandb
 from datasets import load_dataset
 from transformers import GPT2TokenizerFast, GPT2Config, GPT2LMHeadModel
 from trl import SFTConfig, SFTTrainer
@@ -17,7 +18,8 @@ config = GPT2Config(
     pad_token_id=tokenizer.pad_token_id,
 )
 model = GPT2LMHeadModel(config)
-print(f"Model has {sum(p.numel() for p in model.parameters()):,} parameters")
+n_params = sum(p.numel() for p in model.parameters())
+print(f"Model has {n_params:,} parameters")
 
 # Reshape into prompt/completion pairs at the last comma -- TRL masks
 # the prompt and computes loss on the completion by default.
@@ -43,7 +45,29 @@ training_args = SFTConfig(
     max_length=192,
     completion_only_loss=True,   # default for prompt/completion data, explicit here for clarity
     fp16=torch.cuda.is_available(),
-    report_to="none",
+    report_to="wandb",
+    run_name="gpt2-trl",
+)
+
+wandb.init(
+    project="pokerai",
+    name="gpt2-trl",
+    config={
+        "model": "gpt2",
+        "n_params": n_params,
+        "n_positions": config.n_positions,
+        "n_embd": config.n_embd,
+        "n_layer": config.n_layer,
+        "n_head": config.n_head,
+        "vocab_size": config.vocab_size,
+        "num_train_epochs": training_args.num_train_epochs,
+        "per_device_train_batch_size": training_args.per_device_train_batch_size,
+        "learning_rate": training_args.learning_rate,
+        "max_length": training_args.max_length,
+        "completion_only_loss": training_args.completion_only_loss,
+        "train_examples": len(train_dataset),
+        "eval_examples": len(eval_dataset),
+    },
 )
 
 trainer = SFTTrainer(
@@ -57,6 +81,5 @@ trainer = SFTTrainer(
 trainer.train()
 trainer.save_model("model_out_trl")
 tokenizer.save_pretrained("model_out_trl")
+wandb.finish()
 print("Saved to model_out_trl/")
-
-
