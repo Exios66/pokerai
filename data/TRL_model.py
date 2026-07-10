@@ -9,7 +9,7 @@ tokenizer = GPT2TokenizerFast.from_pretrained("tokenizer")
 # Same random-init model as the raw loop -- from_config, not from_pretrained.
 config = GPT2Config(
     vocab_size=len(tokenizer),
-    n_positions=192,
+    n_positions=384,  # HF Poker_Dataset hands can exceed the old 192 limit
     n_embd=256,
     n_layer=6,
     n_head=8,

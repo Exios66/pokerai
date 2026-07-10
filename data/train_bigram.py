@@ -3,10 +3,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import wandb
-from transformers import GPT2TokenizerFast
+from transformers import PreTrainedTokenizerFast
 from datasets import load_dataset
 
-tokenizer = GPT2TokenizerFast.from_pretrained("tokenizer")
+tokenizer = PreTrainedTokenizerFast.from_pretrained("tokenizer")
 vocab_size = len(tokenizer)
 
 dataset = load_dataset("text", data_files={"train": "data/hands_fold_update.txt"})["train"]
@@ -88,9 +88,12 @@ for step in range(n_steps):
             step=step,
         )
 
+with torch.no_grad():
+    final_val_loss = F.cross_entropy(model(val_x), val_y).item()
+
 random_baseline = math.log(vocab_size)
 print(f"\nRandom-guess baseline loss: {random_baseline:.4f}  (ln(vocab_size))")
-print(f"Bigram model final val loss: {val_loss.item():.4f}")
+print(f"Bigram model final val loss: {final_val_loss:.4f}")
 wandb.summary["random_baseline_loss"] = random_baseline
-wandb.summary["final_val_loss"] = val_loss.item()
+wandb.summary["final_val_loss"] = final_val_loss
 wandb.finish()

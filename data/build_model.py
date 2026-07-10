@@ -1,17 +1,22 @@
+from typing import cast
+
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import wandb
 from torch.utils.data import Dataset, DataLoader
-from transformers import GPT2TokenizerFast, GPT2Config, GPT2LMHeadModel
+from transformers import PreTrainedTokenizerFast, GPT2Config, GPT2LMHeadModel
 from datasets import load_dataset
 
-tokenizer = GPT2TokenizerFast.from_pretrained("tokenizer")
+tokenizer = PreTrainedTokenizerFast.from_pretrained("tokenizer")
 vocab_size = len(tokenizer)
+# HF Poker_Dataset hands run up to ~377 tokens; 192 overflows position embeddings.
+n_positions = 384
 
 # ---- Model: random init (from_config, not from_pretrained) ----
 config = GPT2Config(
     vocab_size=vocab_size,
-    n_positions=192,
+    n_positions=n_positions,
     n_embd=256,
     n_layer=6,
     n_head=8,
@@ -24,7 +29,7 @@ n_params = sum(p.numel() for p in model.parameters())
 print(f"Model has {n_params:,} parameters")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model.to(device)
+cast(nn.Module, model).to(device)
 print("Training on:", device)
 
 # ---- Data: tokenize full sequence, mask everything up to the last comma ----
@@ -38,6 +43,12 @@ def encode_with_mask(text):
     prompt_ids = tokenizer(prompt_text)["input_ids"]
     full_ids = [tokenizer.bos_token_id] + tokenizer(text)["input_ids"] + [tokenizer.eos_token_id]
     prompt_len = len(prompt_ids) + 1  # +1 for BOS
+
+    # Keep the end (action) if we ever exceed context length.
+    if len(full_ids) > n_positions:
+        drop = len(full_ids) - n_positions
+        full_ids = full_ids[drop:]
+        prompt_len = max(0, prompt_len - drop)
 
     labels = [-100] * len(full_ids)
     for i in range(prompt_len, len(full_ids)):
@@ -116,6 +127,7 @@ def run_eval():
     return total_loss / total_tokens
 
 step = 0
+val_loss = float("nan")
 for epoch in range(num_epochs):
     for input_ids, labels, attn_mask in train_loader:
         input_ids, labels, attn_mask = input_ids.to(device), labels.to(device), attn_mask.to(device)
