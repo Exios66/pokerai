@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pokerai"
+version = "0.2.0"
+description = "Train a small GPT-2 to predict poker actions from game state"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "torch>=2.0.0",
+  "transformers>=4.40.0",
+  "datasets>=2.0.0",
+  "tokenizers>=0.15.0",
+  "trl>=0.7.0",
+  "wandb>=0.16.0",
+  "pyarrow>=14.0.0",
+  "accelerate>=0.26.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0.0"]
+
+[project.scripts]
+pokerai-prepare = "pokerai.data.prepare:main"
+pokerai-tokenizer = "pokerai.data.tokenizer:main"
+pokerai-bigram = "pokerai.training.train_bigram:main"
+pokerai-gpt2 = "pokerai.training.train_gpt2:main"
+pokerai-trl = "pokerai.training.train_trl:main"
+pokerai-predict = "pokerai.inference:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

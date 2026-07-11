@@ -1,0 +1,8 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
+  "include": ["src", "scripts", "tests"],
+  "exclude": ["venv", ".venv", "**/__pycache__", "artifacts", "wandb"],
+  "extraPaths": ["src"]
+}

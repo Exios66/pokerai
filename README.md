@@ -1,10 +1,6 @@
-# Poker AI Training Pipeline
+# Poker AI
 
-A machine learning pipeline for training a GPT-2 model to predict poker actions from game states. The project uses transformer-based language modeling to learn poker decision-making from hand history data.
-
-## Project Overview
-
-This project trains a neural network to predict poker actions (FOLD, CALL, RAISE) given the current game state. The model learns from real poker hand histories using a masked language modeling approach where the context (game state) is provided and the model must predict the action.
+Train a small GPT-2 decoder to predict poker actions (FOLD, CALL, RAISE, …) from a serialized game state. Loss is applied only to the action tokens (completion-only / masked training).
 
 ## Setup
 
@@ -48,7 +44,12 @@ Cleans the raw poker data and creates train/test splits:
 Skip this step if you used `convert_poker_dataset.py` above — that script already produces cleaned, pre-split files (`hands_train.txt` / `hands_test.txt`).
 
 ```bash
-python data/prepare_data.py
+git clone https://github.com/Exios66/pokerai.git
+cd pokerai
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"            # or: pip install -r requirements.txt && pip install -e .
+wandb login                        # optional; or WANDB_MODE=disabled
 ```
 
 ### 2. Tokenizer Training (`data/train_tokenizer.py`)
@@ -70,43 +71,39 @@ Trains a simple bigram model for comparison:
 - Expected validation loss: ~1.53
 - **Not the real model** — if later steps don't clearly beat this, something upstream (tokenizer, data format, masking) is broken
 
-```bash
-python data/train_bigram.py
+| Step | Command | Output |
+|------|---------|--------|
+| 1. Fetch & clean data | `python scripts/prepare_data.py` | `data/hands.txt`, `data/hands_clean.txt` |
+| 2. Train tokenizer | `python scripts/train_tokenizer.py` | `artifacts/tokenizer/` |
+| 3. Bigram baseline | `python scripts/train_bigram.py` | `artifacts/models/bigram/` |
+| 4a. GPT-2 (raw loop) | `python scripts/train_gpt2.py` | `artifacts/models/gpt2/` |
+| 4b. GPT-2 (TRL) | `python scripts/train_trl.py` | `artifacts/models/gpt2_trl/` |
+| 5. Predict | `python scripts/predict.py "<state>"` | printed action |
+
+After `pip install -e .` you can also use `pokerai-prepare`, `pokerai-gpt2`, `pokerai-predict`, etc.
+
+## Data
+
+Hands are downloaded from Hugging Face [`SoelMgd/Poker_Dataset`](https://huggingface.co/datasets/SoelMgd/Poker_Dataset). Each line is `context,action` — split at the **last comma**.
+
+Example:
+
+```
+[TABLE_CONFIGURATION] BTN=P3 SB=P1 0.5BB BB=P2 1BB [STACKS] P1: 44.2BB [Qh 9h] P2: 103.4BB P3: 165.2BB POT=1.5BB [PREFLOP] P3: RAISE 2BB P1:,FOLD
 ```
 
-### 4. GPT-2 Model Training
+Cleaning normalizes redundant suffixes (`CALL 0BB` → `CALL`, legacy `FOLD0BB` → `FOLD`).
 
-**Option A: Raw PyTorch Loop (`data/build_model.py`)**
-- GPT-2 architecture (6 layers, 256 hidden dimensions, 8 heads)
-- Context length: 192 tokens
-- Masked training: only predicts the action, not the context
-- 3 epochs with AdamW optimizer (lr=3e-4)
+## Model
 
-```bash
-python data/build_model.py
-```
-
-**Option B: TRL Trainer (`data/TRL_model.py`)**
-- Uses Hugging Face TRL library for supervised fine-tuning
-- Same model architecture as raw loop
-- Prompt/completion format for masked training
-- Saves model to `model_out_trl/`
-
-```bash
-python data/TRL_model.py
-```
-
-## Model Architecture
-
-- **Model Type**: GPT-2 (decoder-only transformer)
-- **Parameters**: ~2.6M
-- **Layers**: 6
-- **Hidden Size**: 256
-- **Attention Heads**: 8
-- **Context Window**: 192 tokens
-- **Vocabulary Size**: 4000 (domain-specific)
-
-## Training Strategy
+| Setting | Value |
+|---------|-------|
+| Architecture | GPT-2 (random init) |
+| Layers / hidden / heads | 6 / 256 / 8 |
+| Context length | **384** tokens |
+| Vocab | Domain BPE (target size 4000; actual size depends on data) |
+| Special tokens | `<\|startoftext\|>` (BOS), `<\|endoftext\|>` (EOS), `<\|pad\|>` |
+| Optimizer | AdamW, lr `3e-4`, 3 epochs, batch 32 |
 
 The model uses masked language modeling:
 - **Input**: Full hand history (game state + action)
@@ -120,7 +117,17 @@ The model uses masked language modeling:
 
 If using your own hand histories, each line should follow this format:
 ```
-POSITION,STACK,CARDS,PLAYER1_INFO,PLAYER2_INFO,...,ACTION
+pokerai/
+├── src/pokerai/           # installable package
+│   ├── config.py          # paths + hyperparameters
+│   ├── data/              # fetch, clean, tokenize, encode/mask
+│   ├── models/            # Bigram + GPT-2 factory
+│   ├── training/          # bigram / gpt2 / trl trainers
+│   └── inference/         # action prediction
+├── scripts/               # thin CLI wrappers
+├── tests/
+├── data/                  # hand text only (gitignored)
+└── artifacts/             # tokenizer + models (gitignored)
 ```
 
 Example:
@@ -164,7 +171,7 @@ python data/build_model.py
 wandb sync wandb/offline-run-*
 ```
 
-## Performance
+## Experiment tracking
 
 - **Bigram baseline**: Validation loss ~1.53
 - **GPT-2 model**: Expected to significantly outperform baseline
