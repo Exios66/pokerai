@@ -3,7 +3,17 @@ venv/
 env/
 *.pyc
 __pycache__/
-model_out_trl/
+*.egg-info/
+.pytest_cache/
+dist/
+build/
+
+# Generated artifacts
+artifacts/
 tokenizer/
-data/*.txt
+model_out_trl/
 wandb/
+
+# Hand history text (regenerate via scripts/prepare_data.py)
+data/*.txt
+!data/.gitkeep

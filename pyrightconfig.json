@@ -2,6 +2,7 @@
   "venvPath": ".",
   "venv": ".venv",
   "pythonVersion": "3.11",
-  "include": ["data"],
-  "exclude": ["venv", ".venv", "**/__pycache__"]
+  "include": ["src", "scripts", "tests"],
+  "exclude": ["venv", ".venv", "**/__pycache__", "artifacts", "wandb"],
+  "extraPaths": ["src"]
 }

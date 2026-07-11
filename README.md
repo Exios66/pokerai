@@ -1,167 +1,86 @@
-# Poker AI Training Pipeline
+# Poker AI
 
-A machine learning pipeline for training a GPT-2 model to predict poker actions from game states. The project uses transformer-based language modeling to learn poker decision-making from hand history data.
-
-## Project Overview
-
-This project trains a neural network to predict poker actions (FOLD, CALL, RAISE) given the current game state. The model learns from real poker hand histories using a masked language modeling approach where the context (game state) is provided and the model must predict the action.
+Train a small GPT-2 decoder to predict poker actions (FOLD, CALL, RAISE, …) from a serialized game state. Loss is applied only to the action tokens (completion-only / masked training).
 
 ## Setup
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/pokerAI.git
-   cd pokerAI
-   ```
-
-2. **Create virtual environment**
-   ```bash
-   python -m venv venv
-   venv\Scripts\activate  # On Windows
-   source venv/bin/activate  # On Linux/Mac
-   ```
-
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Log in to Weights & Biases** (for experiment tracking)
-   ```bash
-   wandb login
-   ```
-   Training scripts log to the `pokerai` W&B project. Set `WANDB_MODE=disabled` to skip logging.
-
-5. **Prepare your data**
-   - Place your poker hand history data in `data/hands.txt`
-   - Each line should be a complete hand history in the format: `POSITION,STACK,CARDS,PLAYER_INFO,ACTION`
-
-## Training Pipeline
-
-### 1. Data Preparation (`data/prepare_data.py`)
-Cleans the raw poker data and creates train/test splits:
-- Removes redundant "0BB" from FOLD actions
-- Splits data into 95% training / 5% validation
-- Saves cleaned data to `data/hands_fold_update.txt`
-
 ```bash
-python data/prepare_data.py
+git clone https://github.com/Exios66/pokerai.git
+cd pokerai
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"            # or: pip install -r requirements.txt && pip install -e .
+wandb login                        # optional; or WANDB_MODE=disabled
 ```
 
-### 2. Tokenizer Training (`data/train_tokenizer.py`)
-Trains a custom BPE tokenizer on the poker domain:
-- Vocabulary size: 4000 tokens
-- Special tokens: `<|startoftext|>`, `<|pad|>`
-- Saves tokenizer to `tokenizer/` directory
+## Pipeline
 
-```bash
-python data/train_tokenizer.py
-```
+Run from the repo root, in order:
 
-### 3. Baseline Model (`data/train_bigram.py`)
-Trains a simple bigram model for comparison:
-- Provides a baseline for model performance
-- Expected validation loss: ~1.53
+| Step | Command | Output |
+|------|---------|--------|
+| 1. Fetch & clean data | `python scripts/prepare_data.py` | `data/hands.txt`, `data/hands_clean.txt` |
+| 2. Train tokenizer | `python scripts/train_tokenizer.py` | `artifacts/tokenizer/` |
+| 3. Bigram baseline | `python scripts/train_bigram.py` | `artifacts/models/bigram/` |
+| 4a. GPT-2 (raw loop) | `python scripts/train_gpt2.py` | `artifacts/models/gpt2/` |
+| 4b. GPT-2 (TRL) | `python scripts/train_trl.py` | `artifacts/models/gpt2_trl/` |
+| 5. Predict | `python scripts/predict.py "<state>"` | printed action |
 
-```bash
-python data/train_bigram.py
-```
+After `pip install -e .` you can also use `pokerai-prepare`, `pokerai-gpt2`, `pokerai-predict`, etc.
 
-### 4. GPT-2 Model Training
+## Data
 
-**Option A: Raw PyTorch Loop (`data/build_model.py`)**
-- GPT-2 architecture (6 layers, 256 hidden dimensions, 8 heads)
-- Context length: 192 tokens
-- Masked training: only predicts the action, not the context
-- 3 epochs with AdamW optimizer (lr=3e-4)
-
-```bash
-python data/build_model.py
-```
-
-**Option B: TRL Trainer (`data/TRL_model.py`)**
-- Uses Hugging Face TRL library for supervised fine-tuning
-- Same model architecture as raw loop
-- Prompt/completion format for masked training
-- Saves model to `model_out_trl/`
-
-```bash
-python data/TRL_model.py
-```
-
-## Model Architecture
-
-- **Model Type**: GPT-2 (decoder-only transformer)
-- **Parameters**: ~2.6M
-- **Layers**: 6
-- **Hidden Size**: 256
-- **Attention Heads**: 8
-- **Context Window**: 192 tokens
-- **Vocabulary Size**: 4000 (domain-specific)
-
-## Training Strategy
-
-The model uses masked language modeling:
-- **Input**: Full hand history (game state + action)
-- **Masking**: All tokens up to the last comma (the game state) are masked
-- **Prediction**: Model learns to predict only the action tokens
-- This ensures the model focuses on decision-making, not memorizing game states
-
-## Data Format
-
-Each hand history line should follow this format:
-```
-POSITION,STACK,CARDS,PLAYER1_INFO,PLAYER2_INFO,...,ACTION
-```
+Hands are downloaded from Hugging Face [`SoelMgd/Poker_Dataset`](https://huggingface.co/datasets/SoelMgd/Poker_Dataset). Each line is `context,action` — split at the **last comma**.
 
 Example:
-```
-BTN,1.5BB,9d 10c,P1:101.0BB/0.0BB,P2:100.23BB/0.0BB,FOLD
-```
-
-## File Structure
 
 ```
-pokerAI/
-├── data/
-│   ├── prepare_data.py      # Data cleaning and splitting
-│   ├── train_tokenizer.py   # Custom tokenizer training
-│   ├── train_bigram.py       # Baseline model training
-│   ├── build_model.py       # GPT-2 training (raw loop)
-│   ├── TRL_model.py         # GPT-2 training (TRL)
-│   ├── hands.txt            # Raw input data (not in repo)
-│   └── hands_fold_update.txt # Cleaned data (not in repo)
-├── tokenizer/                # Trained tokenizer (not in repo)
-├── model_out_trl/           # Trained model (not in repo)
-├── requirements.txt         # Python dependencies
-└── README.md                # This file
+[TABLE_CONFIGURATION] BTN=P3 SB=P1 0.5BB BB=P2 1BB [STACKS] P1: 44.2BB [Qh 9h] P2: 103.4BB P3: 165.2BB POT=1.5BB [PREFLOP] P3: RAISE 2BB P1:,FOLD
 ```
 
-## Performance
+Cleaning normalizes redundant suffixes (`CALL 0BB` → `CALL`, legacy `FOLD0BB` → `FOLD`).
 
-- **Bigram baseline**: Validation loss ~1.53
-- **GPT-2 model**: Expected to significantly outperform baseline
-- Compare final validation loss against baseline to assess improvement
+## Model
 
-## Experiment Tracking (W&B)
+| Setting | Value |
+|---------|-------|
+| Architecture | GPT-2 (random init) |
+| Layers / hidden / heads | 6 / 256 / 8 |
+| Context length | **384** tokens |
+| Vocab | Domain BPE (target size 4000; actual size depends on data) |
+| Special tokens | `<\|startoftext\|>` (BOS), `<\|endoftext\|>` (EOS), `<\|pad\|>` |
+| Optimizer | AdamW, lr `3e-4`, 3 epochs, batch 32 |
 
-All training scripts log to the `pokerai` Weights & Biases project:
+Training masks the game-state prefix so the model only learns to predict the hero action.
 
-| Script | Run name | Logged metrics |
-|--------|----------|----------------|
-| `train_bigram.py` | `bigram-baseline` | train/val loss, final val loss |
-| `build_model.py` | `gpt2-raw` | train/val loss per step/epoch |
-| `TRL_model.py` | `gpt2-trl` | HF Trainer metrics via `report_to="wandb"` |
+## Layout
 
-Hyperparameters (model size, LR, batch size, etc.) are logged as run config. View runs at [wandb.ai](https://wandb.ai) under the `pokerai` project.
+```
+pokerai/
+├── src/pokerai/           # installable package
+│   ├── config.py          # paths + hyperparameters
+│   ├── data/              # fetch, clean, tokenize, encode/mask
+│   ├── models/            # Bigram + GPT-2 factory
+│   ├── training/          # bigram / gpt2 / trl trainers
+│   └── inference/         # action prediction
+├── scripts/               # thin CLI wrappers
+├── tests/
+├── data/                  # hand text only (gitignored)
+└── artifacts/             # tokenizer + models (gitignored)
+```
+
+## Tests
+
+```bash
+pytest
+```
+
+## Experiment tracking
+
+Training logs to the W&B project `pokerai` (`bigram-baseline`, `gpt2-raw`, `gpt2-trl`). Set `WANDB_MODE=disabled` to skip.
 
 ## Notes
 
-- Large files (data, models, tokenizer) are excluded from git via .gitignore
-- These can be regenerated by running the training scripts
-- Model training requires CUDA GPU for reasonable speed
-- Adjust batch size and learning rate based on your hardware
-
-## License
-
-[Add your license here]
+- GPU (CUDA) is recommended; scripts also use MPS on Apple Silicon when available.
+- Regenerate data, tokenizer, and models with the scripts above — they are not committed.
+- Prefer `train_trl.py` for the HF Trainer path; `train_gpt2.py` is the equivalent raw loop and now saves checkpoints.
