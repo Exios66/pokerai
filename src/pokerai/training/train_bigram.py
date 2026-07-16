@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 from pathlib import Path
 
 import torch
@@ -57,7 +58,7 @@ def main(
 
     wandb.init(
         project=WANDB_PROJECT,
-        name="bigram-baseline",
+        name=os.environ.get("WANDB_NAME", "bigram-baseline"),
         config={
             "model": "bigram",
             "vocab_size": vocab_size,
