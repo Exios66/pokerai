@@ -87,6 +87,10 @@ Use the experiment launcher (preferred):
 python scripts/run_experiment.py bigram --group model-comparison --tags exp-a1,baseline
 python scripts/run_experiment.py gpt2 --n-layer 4 --lr 1e-4 --name gpt2-depth4 --group depth-sweep --tags exp-b1
 python scripts/run_experiment.py trl --epochs 5 --batch-size 16 --group optim --tags exp-c3
+python scripts/run_experiment.py majority --group imbalance --tags exp-f2
+python scripts/run_experiment.py features --method rf --group alt-approaches --tags exp-i2
+python scripts/run_experiment.py weighted-gpt2 --group imbalance --tags exp-f3
+python scripts/evaluate.py --model artifacts/models/gpt2 --max-examples 256
 ```
 
 Or construct `GPT2Hyperparams` in Python / edit `src/pokerai/config.py`. For tokenizer vocab ablations, retrain with:
@@ -325,14 +329,16 @@ Default `TEST_SIZE=0.05`, `SPLIT_SEED=42` in `load_text_split`. Changing seed wi
 
 ## Family F — Class imbalance & decision quality
 
-Raw CE is insufficient alone (README known limitation). These experiments make W&B charts *action-aware*.
+Raw CE is insufficient alone. These experiments make W&B charts **action-aware** (FOLD / CALL / RAISE / CHECK / BET).
 
-### EXP-F1 — Per-action-type eval metrics (instrumentation)
+Post-train GPT-2 eval and `scripts/evaluate.py` write confusion matrices, per-class F1 bars, and occlusion feature-importance charts under `<model>/report/` and log them to W&B when configured.
+
+### EXP-F1 — Per-action-type eval metrics
 
 | | |
 |--|--|
-| **Configs** | Default GPT-2 + bigram; log accuracy / CE grouped by first action token: `FOLD`, `CALL`, `CHECK`, `RAISE`, `BET`, … |
-| **How to test** | Post-hoc eval script over val set: greedy decode or teacher-forced first-action accuracy; `wandb.log` per-class tables. |
+| **Configs** | Default GPT-2 (or any saved HF checkpoint) |
+| **How to test** | Automatic after `run_experiment.py gpt2` / `weighted-gpt2`, or: `python scripts/evaluate.py --model artifacts/models/gpt2 --max-examples 256`. Metrics: `eval/action/{fold,call,raise,...}/{precision,recall,f1}` + confusion plot. |
 | **Showcases** | That low overall loss can hide failure on minority aggressive actions. |
 | **Look for** | High FOLD accuracy, weaker RAISE/BET. Prefer models that improve minority classes without collapsing to always-FOLD. |
 
@@ -340,19 +346,19 @@ Raw CE is insufficient alone (README known limitation). These experiments make W
 
 | | |
 |--|--|
-| **Configs** | Constant predictor = most frequent train action string (usually FOLD). |
-| **How to test** | Compute action-string accuracy / CE on val; log as a W&B run summary baseline. |
+| **Configs** | Constant predictor = most frequent train action type (usually FOLD). |
+| **How to test** | `python scripts/run_experiment.py majority --group imbalance --tags exp-f2` |
 | **Showcases** | Floor for classification-style metrics (complementary to bigram’s token CE). |
-| **Look for** | Neural models should beat majority accuracy on non-FOLD slices even if overall accuracy looks “high” from FOLD dominance. |
+| **Look for** | Neural / feature models should beat majority accuracy on non-FOLD slices even if overall accuracy looks “high” from FOLD dominance. |
 
-### EXP-F3 — Weighted / focal loss on actions (research follow-on)
+### EXP-F3 — Weighted GPT-2 loss on action types
 
 | | |
 |--|--|
-| **Configs** | Inverse-frequency weights on action-type tokens; compare to unweighted default. |
-| **How to test** | Requires a small training-code change; keep architecture fixed. |
+| **Configs** | Inverse-frequency weights on examples by action type (`class_weight=True`). |
+| **How to test** | `python scripts/run_experiment.py weighted-gpt2 --group imbalance --tags exp-f3` |
 | **Showcases** | Whether rebalancing improves RAISE/BET quality at a tolerable cost to FOLD CE. |
-| **Look for** | Better minority metrics; watch overall `val/loss` — mild regression OK if decision quality improves. |
+| **Look for** | Better minority `eval/action/raise/f1` (and BET); mild regression in overall `val/loss` is OK if decision quality improves. |
 
 ---
 
@@ -418,7 +424,53 @@ Raw CE is insufficient alone (README known limitation). These experiments make W
 
 ---
 
-## Family I — Suggested W&B sweeps (automation)
+## Family I — Alternative modeling approaches
+
+Different paradigms from the GPT-2 LM — useful for feature importance, imbalance floors, and comparing text LMs to tabular classifiers.
+
+### EXP-I1 — Majority action-type baseline (see also F2)
+
+| | |
+|--|--|
+| **Command** | `python scripts/run_experiment.py majority --group alt-approaches --tags exp-i1` |
+| **Showcases** | Non-neural floor; charts include confusion + per-class F1. |
+| **Look for** | Near-100% FOLD recall, ~0 on RAISE/BET — the imbalance story in one plot. |
+
+### EXP-I2 — RandomForest on structured hand features
+
+| | |
+|--|--|
+| **Command** | `python scripts/run_experiment.py features --method rf --group alt-approaches --tags exp-i2` |
+| **Showcases** | Tabular ML with native `feature_importances_` (pot, stacks, street, aggression counts, hole cards, …). Logs importance bar chart + action confusion. |
+| **Look for** | Which engineered features drive CALL vs FOLD; whether RF beats majority on RAISE/BET F1. |
+
+### EXP-I3 — Balanced LogisticRegression on the same features
+
+| | |
+|--|--|
+| **Command** | `python scripts/run_experiment.py features --method logreg --group alt-approaches --tags exp-i3` |
+| **Showcases** | Linear, class-balanced alternative; importance = mean \|coefficient\|. |
+| **Look for** | Comparable story to RF with a simpler decision boundary; good sanity check on feature scale. |
+
+### EXP-I4 — Class-weighted GPT-2 (see also F3)
+
+| | |
+|--|--|
+| **Command** | `python scripts/run_experiment.py weighted-gpt2 --group alt-approaches --tags exp-i4` |
+| **Showcases** | Same architecture as A2, different training objective (inverse-frequency example weights) + full action eval charts. |
+| **Look for** | Lift on minority action F1 vs unweighted `gpt2` at matched hparams. |
+
+### EXP-I5 — Occlusion feature importance on a trained LM
+
+| | |
+|--|--|
+| **Command** | `python scripts/evaluate.py --model artifacts/models/gpt2 --max-examples 128 --max-importance 64` |
+| **Showcases** | Ablate `[TABLE_CONFIGURATION]`, stacks, pot, streets, hole cards; importance = Δ action accuracy. |
+| **Look for** | Large drops when masking stacks / aggression history; confirms the model uses poker state, not just priors. |
+
+---
+
+## Family J — Suggested W&B sweeps (automation)
 
 Minimal sweep for a compelling public project page:
 
@@ -459,7 +511,8 @@ Run in this order for a clean W&B narrative:
 6. **B1 + B2** Depth/width on the winning LR  
 7. **B4** Context length (guided by tokenizer length histogram)  
 8. **E1** Data scaling  
-9. **F1 + H1** Per-action metrics + prediction table (makes the project demo-ready)
+9. **F1 + I2 + I5** Per-action metrics, RF feature importance, occlusion charts (demo-ready)  
+10. **F2 + F3 / I4** Majority floor vs weighted GPT-2
 
 ---
 
@@ -470,16 +523,17 @@ For each completed experiment, record:
 | Field | Value |
 |-------|-------|
 | Run name / group / tags | |
-| Trainer (`bigram` / `gpt2-raw` / `gpt2-trl`) | |
+| Trainer (`bigram` / `gpt2-raw` / `gpt2-trl` / `majority` / `features` / `weighted-gpt2`) | |
 | Architecture (`n_layer/n_embd/n_head/n_positions`) | |
 | Optim (`lr`, `batch`, `epochs` or `steps`) | |
 | Data (`hands_clean` path, split seed, subsample %) | |
 | Tokenizer vocab / max tokens observed | |
 | `final_val_loss` or best `eval_loss` | |
-| vs bigram Δ | |
-| Notes (truncation %, qualitative fails) | |
+| Action metrics (`accuracy`, `macro_f1`, per-class F1) | |
+| vs bigram Δ / vs majority Δ | |
+| Notes (truncation %, qualitative fails, top features) | |
 
-**Pass criteria for the default stack:** GPT-2 (raw and TRL) both beat bigram `final_val_loss` by a clear margin; raw≈TRL; predictions are syntactically valid poker actions on a smoke gallery.
+**Pass criteria for the default stack:** GPT-2 (raw and TRL) both beat bigram `final_val_loss` by a clear margin; raw≈TRL; predictions are syntactically valid poker actions on a smoke gallery; action-type charts show non-zero RAISE/BET recall (not pure majority-FOLD).
 
 ---
 
@@ -494,5 +548,8 @@ For each completed experiment, record:
 | TRL completion-only | Pre-tokenized via `encode_with_mask` + `skip_prepare_dataset=True` (action labels already `-100`-masked) |
 | Paths | `HANDS_CLEAN`, `TOKENIZER_DIR`, `MODEL_*_DIR` |
 | Hand format | Always `context,action` (last comma). Converter and prepare share `to_line`. |
+| Action eval / charts | `pokerai.eval` + `scripts/evaluate.py` |
+| Structured features | `pokerai.features` → RF / LogReg trainers |
+| Class-weighted GPT-2 | `scripts/run_experiment.py weighted-gpt2` |
 
-Experiments marked as needing instrumentation (**F1–F3**, **H2**) are still valuable showcase work; implement the small eval/trainer hooks before claiming those W&B panels. Official-split work (**E3**) no longer needs separator alignment — both converters emit commas.
+Experiments marked as needing further instrumentation (**H2** sampling toggle) remain optional polish. **F1–F3** and **I1–I5** are implemented via the CLI trainers and `evaluate.py`.
