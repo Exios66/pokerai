@@ -8,7 +8,6 @@ from pathlib import Path
 
 import torch
 import torch.nn.functional as F
-import wandb
 
 from pokerai.config import (
     BIGRAM_BATCH_SIZE,
@@ -20,7 +19,7 @@ from pokerai.config import (
 )
 from pokerai.data import encode_with_mask, load_text_split
 from pokerai.models import Bigram
-from pokerai.training import get_device, load_tokenizer
+from pokerai.training import get_device, load_tokenizer, wandb_is_configured
 
 
 def _action_pairs(sequences: list[tuple[list[int], list[int]]]):
@@ -52,25 +51,37 @@ def main(
     train_x, train_y = _action_pairs(train_enc)
     val_x, val_y = _action_pairs(val_enc)
     print(f"Train pairs: {len(train_x):,}  Val pairs: {len(val_x):,}")
+    if len(train_x) == 0:
+        raise RuntimeError(
+            "No supervised action pairs in the training split. "
+            "Check that hands contain a comma-separated action and that "
+            "the tokenizer was trained on the same cleaned corpus."
+        )
+    if len(val_x) == 0:
+        raise RuntimeError("No supervised action pairs in the validation split.")
 
     device = get_device()
     print("Training on:", device)
 
-    wandb.init(
-        project=WANDB_PROJECT,
-        name=os.environ.get("WANDB_NAME", "bigram-baseline"),
-        config={
-            "model": "bigram",
-            "vocab_size": vocab_size,
-            "batch_size": batch_size,
-            "n_steps": n_steps,
-            "learning_rate": lr,
-            "device": device,
-            "train_pairs": len(train_x),
-            "val_pairs": len(val_x),
-            "masked_action_only": True,
-        },
-    )
+    use_wandb = wandb_is_configured()
+    if use_wandb:
+        import wandb
+
+        wandb.init(
+            project=WANDB_PROJECT,
+            name=os.environ.get("WANDB_NAME", "bigram-baseline"),
+            config={
+                "model": "bigram",
+                "vocab_size": vocab_size,
+                "batch_size": batch_size,
+                "n_steps": n_steps,
+                "learning_rate": lr,
+                "device": device,
+                "train_pairs": len(train_x),
+                "val_pairs": len(val_x),
+                "masked_action_only": True,
+            },
+        )
 
     model = Bigram(vocab_size).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
@@ -91,10 +102,13 @@ def main(
             print(
                 f"step {step:5d} | train loss {loss.item():.4f} | val loss {val_loss.item():.4f}"
             )
-            wandb.log(
-                {"train/loss": loss.item(), "val/loss": val_loss.item()},
-                step=step,
-            )
+            if use_wandb:
+                import wandb
+
+                wandb.log(
+                    {"train/loss": loss.item(), "val/loss": val_loss.item()},
+                    step=step,
+                )
 
     with torch.no_grad():
         final_val_loss = F.cross_entropy(model(val_x), val_y).item()
@@ -102,8 +116,6 @@ def main(
     random_baseline = math.log(vocab_size)
     print(f"\nRandom-guess baseline loss: {random_baseline:.4f}")
     print(f"Bigram model final val loss: {final_val_loss:.4f}")
-    wandb.summary["random_baseline_loss"] = random_baseline
-    wandb.summary["final_val_loss"] = final_val_loss
 
     output_dir.mkdir(parents=True, exist_ok=True)
     torch.save(
@@ -111,7 +123,13 @@ def main(
         output_dir / "bigram.pt",
     )
     print(f"Saved to {output_dir / 'bigram.pt'}")
-    wandb.finish()
+
+    if use_wandb:
+        import wandb
+
+        wandb.summary["random_baseline_loss"] = random_baseline
+        wandb.summary["final_val_loss"] = final_val_loss
+        wandb.finish()
 
 
 if __name__ == "__main__":

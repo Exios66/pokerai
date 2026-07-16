@@ -1,14 +1,14 @@
 # W&B Experiment Catalog — Poker AI
 
-This document is a complete catalog of experiments you can run against this repository’s models and configurations, logged to the shared Weights & Biases project **`pokerai`**. Use it to compare baselines, ablations, and training backends with a consistent evaluation story.
+This document is a complete catalog of experiments you can run against this repository’s models and configurations. When Weights & Biases is configured, runs log to the shared project **`pokerai`**. Use it to compare baselines, ablations, and training backends with a consistent evaluation story.
 
-All three trainers already log to W&B:
+**W&B is optional.** Trainers only call `wandb.init` / set `report_to="wandb"` when an API key is present, `WANDB_MODE` is `offline`/`online`/`shared`, or you are already logged in. Otherwise training proceeds with **no** W&B logging (`report_to="none"`). Catalog and sweep workflows that need comparable panels should enable W&B explicitly (see below) or pass `--require-wandb` to the launcher.
 
-| Script | Run name (default) | Key metrics |
-|--------|--------------------|-------------|
-| `scripts/train_bigram.py` | `bigram-baseline` | `train/loss`, `val/loss`, `final_val_loss`, `random_baseline_loss` |
-| `scripts/train_gpt2.py` | `gpt2-raw` | `train/loss`, `val/loss`, `final_val_loss` |
-| `scripts/train_trl.py` | `gpt2-trl` | HF Trainer / TRL metrics (`loss`, `eval_loss`, …) via `report_to="wandb"` |
+| Script | Run name (default) | Key metrics (when W&B is on) |
+|--------|--------------------|------------------------------|
+| `scripts/train_bigram.py` | `bigram-baseline` (or `WANDB_NAME`) | `train/loss`, `val/loss`, `final_val_loss`, `random_baseline_loss` |
+| `scripts/train_gpt2.py` | `gpt2-raw` (or `WANDB_NAME`) | `train/loss`, `val/loss`, `final_val_loss` |
+| `scripts/train_trl.py` | `gpt2-trl` (or `WANDB_NAME`) | HF Trainer / TRL metrics (`loss`, `eval_loss`, …) via `report_to="wandb"` when configured |
 
 ---
 
@@ -18,10 +18,19 @@ All three trainers already log to W&B:
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-wandb login                    # or: export WANDB_MODE=offline
 
 python scripts/prepare_data.py       # -> data/hands.txt, data/hands_clean.txt
 python scripts/train_tokenizer.py    # -> artifacts/tokenizer/
+```
+
+**Enable W&B for catalog / dashboard runs** (pick one):
+
+```bash
+wandb login                           # online logging
+# or:
+export WANDB_MODE=offline             # log locally, sync later
+# force off (no logging, no prompts):
+export WANDB_MODE=disabled
 ```
 
 **Offline compute (e.g. CHTC):**
@@ -32,13 +41,19 @@ export WANDB_MODE=offline
 wandb sync wandb/offline-run-*
 ```
 
-**W&B hygiene (recommended for every run):**
+**W&B hygiene (recommended whenever you want comparable panels):**
 
 ```bash
 export WANDB_PROJECT=pokerai
 export WANDB_RUN_GROUP="<experiment-family>"   # e.g. model-comparison
 export WANDB_TAGS="exp01,gpt2,baseline"
 # optionally: export WANDB_NAME="gpt2-raw-lr3e4"
+```
+
+The launcher prints whether W&B is active. For sweeps or must-log experiments, fail loudly if it is not:
+
+```bash
+python scripts/run_experiment.py gpt2 --require-wandb --group capacity --tags exp-b1
 ```
 
 ---
@@ -80,7 +95,7 @@ from pokerai.data.tokenizer import train_tokenizer
 train_tokenizer(vocab_size=2000)  # then re-run model training
 ```
 
-Tag every W&B run with the **exact** config so panels stay comparable. `--name` / `--group` / `--tags` set `WANDB_NAME`, `WANDB_RUN_GROUP`, and `WANDB_TAGS`.
+Tag every W&B run with the **exact** config so panels stay comparable. `--name` / `--group` / `--tags` set `WANDB_NAME`, `WANDB_RUN_GROUP`, and `WANDB_TAGS`. Without W&B configured, those flags are still accepted but nothing is logged unless you pass `--require-wandb` (which exits with an error).
 
 ---
 
@@ -283,7 +298,7 @@ Default `TEST_SIZE=0.05`, `SPLIT_SEED=42` in `load_text_split`. Changing seed wi
 | | |
 |--|--|
 | **Configs** | **A:** `prepare_data.py` + `load_text_split` (random 5%). **B:** `scripts/convert_poker_dataset.py` train/test files (dataset’s own split). |
-| **How to test** | For B you must align separators: converter uses `" => "` while the package masking splits on the **last comma**. Prefer adapting converter output to comma join (`to_line`) before training, or teach split logic to use ` => `. |
+| **How to test** | Both paths write **comma-separated** `context,action` lines (same as `to_line` / `split_prompt_completion`). For **B**, point trainers at `data/hands_train.txt` / `data/hands_test.txt` (or load those files instead of `load_text_split` on `hands_clean.txt`). Convert also writes `hands_clean.txt` for the default pipeline. |
 | **Showcases** | Generalization under the dataset author’s held-out split vs an i.i.d. reshuffle (possible leakage if correlated hands). |
 | **Look for** | Val loss higher on the official test split is common and more honest. Large train/test distribution shift ⇒ report both. |
 
@@ -472,9 +487,10 @@ For each completed experiment, record:
 |------|----------|
 | GPT-2 architecture & optim | `src/pokerai/config.py` → `GPT2Hyperparams` |
 | Bigram optim | `BIGRAM_LR`, `BIGRAM_BATCH_SIZE`, `BIGRAM_STEPS` |
-| W&B project | `WANDB_PROJECT = "pokerai"` |
-| Masked encode | `pokerai.data.encode_with_mask` |
-| TRL completion-only | `train_trl.py` → `SFTConfig(completion_only_loss=True)` |
+| W&B project | `WANDB_PROJECT = "pokerai"` (logging only when W&B is configured; see setup) |
+| Masked encode | `pokerai.data.encode_with_mask` (offset-based boundary; keep-end truncation) |
+| TRL completion-only | Pre-tokenized via `encode_with_mask` + `skip_prepare_dataset=True` (action labels already `-100`-masked) |
 | Paths | `HANDS_CLEAN`, `TOKENIZER_DIR`, `MODEL_*_DIR` |
+| Hand format | Always `context,action` (last comma). Converter and prepare share `to_line`. |
 
-Experiments marked as needing instrumentation (**F1–F3**, **H2**, official-split separator alignment in **E3**) are still valuable showcase work; implement the small eval/trainer hooks before claiming those W&B panels.
+Experiments marked as needing instrumentation (**F1–F3**, **H2**) are still valuable showcase work; implement the small eval/trainer hooks before claiming those W&B panels. Official-split work (**E3**) no longer needs separator alignment — both converters emit commas.
