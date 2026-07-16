@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections import Counter
 from pathlib import Path
 from typing import cast
 
@@ -18,7 +19,8 @@ from pokerai.config import (
     WANDB_ENTITY,
     WANDB_PROJECT,
 )
-from pokerai.data import encode_with_mask, load_text_split
+from pokerai.data import encode_with_mask, load_text_split, split_prompt_completion
+from pokerai.eval.actions import action_type
 from pokerai.models import build_gpt2
 from pokerai.training import (
     ensure_wandb_project,
@@ -29,38 +31,77 @@ from pokerai.training import (
 
 
 class HandsDataset(Dataset):
-    def __init__(self, examples: list[tuple[list[int], list[int]]]):
+    def __init__(
+        self,
+        examples: list[tuple[list[int], list[int]]],
+        weights: list[float] | None = None,
+    ):
         self.examples = examples
+        self.weights = weights or [1.0] * len(examples)
 
     def __len__(self) -> int:
         return len(self.examples)
 
     def __getitem__(self, idx: int):
-        return self.examples[idx]
+        ids, labels = self.examples[idx]
+        return ids, labels, self.weights[idx]
 
 
 def make_collate(pad_id: int):
     def collate(batch):
-        max_len = max(len(ids) for ids, _ in batch)
-        input_ids, labels, attn_mask = [], [], []
-        for ids, lbls in batch:
+        max_len = max(len(ids) for ids, _, _ in batch)
+        input_ids, labels, attn_mask, weights = [], [], [], []
+        for ids, lbls, w in batch:
             pad_len = max_len - len(ids)
             input_ids.append(ids + [pad_id] * pad_len)
             labels.append(lbls + [-100] * pad_len)
             attn_mask.append([1] * len(ids) + [0] * pad_len)
+            weights.append(w)
         return (
             torch.tensor(input_ids),
             torch.tensor(labels),
             torch.tensor(attn_mask),
+            torch.tensor(weights, dtype=torch.float),
         )
 
     return collate
+
+
+def _inverse_freq_weights(texts: list[str]) -> list[float]:
+    types = [action_type(split_prompt_completion(t)[1]) for t in texts]
+    counts = Counter(types)
+    n = len(types)
+    # weight_c = n / (K * count_c)
+    k = max(1, len([c for c in counts.values() if c > 0]))
+    return [n / (k * counts[t]) for t in types]
+
+
+def _token_loss(logits, targets, vocab_size: int, weights=None) -> torch.Tensor:
+    """Mean CE over non-ignored tokens; optional per-sequence weights."""
+    flat_logits = logits.reshape(-1, vocab_size)
+    flat_targets = targets.reshape(-1)
+    per_tok = F.cross_entropy(
+        flat_logits, flat_targets, ignore_index=-100, reduction="none"
+    )
+    per_tok = per_tok.view(targets.shape)
+    mask = targets != -100
+    if weights is None:
+        return per_tok[mask].mean() if mask.any() else per_tok.sum() * 0.0
+    # Mean over tokens within each sequence, then weighted mean over batch.
+    tok_counts = mask.sum(dim=1).clamp(min=1).float()
+    seq_loss = (per_tok * mask.float()).sum(dim=1) / tok_counts
+    w = weights.to(seq_loss.device)
+    return (seq_loss * w).sum() / w.sum().clamp(min=1e-8)
 
 
 def main(
     hands_path: Path = HANDS_CLEAN,
     output_dir: Path = MODEL_GPT2_DIR,
     hp: GPT2Hyperparams | None = None,
+    *,
+    class_weight: bool = False,
+    run_action_eval: bool = True,
+    eval_max_examples: int = 256,
 ) -> None:
     hp = hp or GPT2Hyperparams()
     tokenizer = load_tokenizer()
@@ -70,19 +111,20 @@ def main(
     model = build_gpt2(tokenizer, hp)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model has {n_params:,} parameters")
+    if class_weight:
+        print("Using inverse-frequency action-type class weights")
 
     device = get_device()
     cast(nn.Module, model).to(device)
     print("Training on:", device)
 
     split = load_text_split(hands_path)
-    train_enc = [
-        encode_with_mask(ex["text"], tokenizer, hp.n_positions) for ex in split["train"]
-    ]
-    val_enc = [
-        encode_with_mask(ex["text"], tokenizer, hp.n_positions) for ex in split["test"]
-    ]
-    train_ds = HandsDataset(train_enc)
+    train_texts = [ex["text"] for ex in split["train"]]
+    val_texts = [ex["text"] for ex in split["test"]]
+    train_enc = [encode_with_mask(t, tokenizer, hp.n_positions) for t in train_texts]
+    val_enc = [encode_with_mask(t, tokenizer, hp.n_positions) for t in val_texts]
+    train_w = _inverse_freq_weights(train_texts) if class_weight else None
+    train_ds = HandsDataset(train_enc, train_w)
     val_ds = HandsDataset(val_enc)
     collate = make_collate(tokenizer.pad_token_id)
     train_loader = DataLoader(
@@ -93,6 +135,9 @@ def main(
     )
 
     use_wandb = wandb_is_configured()
+    run_name = os.environ.get(
+        "WANDB_NAME", "gpt2-weighted" if class_weight else "gpt2-raw"
+    )
     if use_wandb:
         import wandb
 
@@ -100,9 +145,10 @@ def main(
         wandb.init(
             entity=WANDB_ENTITY,
             project=WANDB_PROJECT,
-            name=os.environ.get("WANDB_NAME", "gpt2-raw"),
+            name=run_name,
             config={
-                "model": "gpt2",
+                "model": "gpt2-weighted" if class_weight else "gpt2",
+                "class_weight": class_weight,
                 "n_params": n_params,
                 "vocab_size": vocab_size,
                 "device": device,
@@ -112,7 +158,7 @@ def main(
             },
         )
 
-    ids, labels = train_ds[0]
+    ids, labels, _w = train_ds[0]
     print("\nTokens:", tokenizer.convert_ids_to_tokens(ids))
     print(
         "Labels:",
@@ -129,7 +175,7 @@ def main(
         model.eval()
         total_loss, total_tokens = 0.0, 0
         with torch.no_grad():
-            for input_ids, batch_labels, attn_mask in val_loader:
+            for input_ids, batch_labels, attn_mask, _weights in val_loader:
                 input_ids = input_ids.to(device)
                 batch_labels = batch_labels.to(device)
                 attn_mask = attn_mask.to(device)
@@ -151,18 +197,20 @@ def main(
     step = 0
     val_loss = float("nan")
     for epoch in range(hp.num_epochs):
-        for input_ids, batch_labels, attn_mask in train_loader:
+        for input_ids, batch_labels, attn_mask, weights in train_loader:
             input_ids = input_ids.to(device)
             batch_labels = batch_labels.to(device)
             attn_mask = attn_mask.to(device)
+            weights = weights.to(device)
             logits = model(input_ids=input_ids, attention_mask=attn_mask).logits[
                 :, :-1, :
             ].contiguous()
             targets = batch_labels[:, 1:].contiguous()
-            loss = F.cross_entropy(
-                logits.reshape(-1, vocab_size),
-                targets.reshape(-1),
-                ignore_index=-100,
+            loss = _token_loss(
+                logits,
+                targets,
+                vocab_size,
+                weights=weights if class_weight else None,
             )
             optimizer.zero_grad()
             loss.backward()
@@ -187,6 +235,25 @@ def main(
     model.save_pretrained(str(output_dir))
     tokenizer.save_pretrained(str(output_dir))
     print(f"\nSaved model to {output_dir}")
+
+    if run_action_eval:
+        from pokerai.eval.report import run_lm_evaluation_report
+
+        report_dir = Path(output_dir) / "report"
+        print(f"Running action-type evaluation (max {eval_max_examples} examples)...")
+        summary = run_lm_evaluation_report(
+            model,
+            tokenizer,
+            val_texts,
+            report_dir=report_dir,
+            max_examples=eval_max_examples,
+            log_wandb=use_wandb,
+        )
+        m = summary["metrics"]
+        print(
+            f"Action eval: accuracy={m['accuracy']:.4f} macro_f1={m['macro_f1']:.4f}"
+        )
+
     if use_wandb:
         import wandb
 

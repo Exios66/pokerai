@@ -37,3 +37,5 @@ def test_launcher_help_mentions_optional_wandb():
     assert proc.returncode == 0
     assert "--require-wandb" in proc.stdout
     assert "optional" in proc.stdout.lower()
+    for trainer in ("majority", "features", "weighted-gpt2", "gpt2", "bigram", "trl"):
+        assert trainer in proc.stdout

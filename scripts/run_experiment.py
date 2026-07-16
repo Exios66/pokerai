@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
-"""Launch a tagged training run with explicit hyperparameters.
+"""Launch a tagged experiment with explicit hyperparameters.
 
-W&B logging is optional: trainers only log when W&B is configured
-(API key, saved login, or WANDB_MODE=offline/online/shared). Use
-``--require-wandb`` for catalog/sweep runs that must appear on the dashboard.
+Trainers:
+  bigram, gpt2, trl          — original LM / baseline stack
+  majority                   — always-predict majority action type
+  features                   — LogReg / RandomForest on structured features
+  weighted-gpt2              — GPT-2 with inverse-frequency action weights
+
+W&B logging is optional unless ``--require-wandb``. After generative training,
+action-type charts (confusion, per-class F1) and occlusion feature importance
+are logged when evaluation runs (GPT-2 / weighted-gpt2 / evaluate.py).
 
 Examples:
-  python scripts/run_experiment.py bigram
-  python scripts/run_experiment.py gpt2 --n-layer 4 --lr 1e-4 --tags depth-4,lr-sweep
-  python scripts/run_experiment.py trl --epochs 5 --batch-size 16 --group capacity
-  python scripts/run_experiment.py gpt2 --require-wandb --group capacity --tags exp-b1
+  python scripts/run_experiment.py majority --group imbalance --tags exp-f2
+  python scripts/run_experiment.py features --method rf --group alt-approaches
+  python scripts/run_experiment.py weighted-gpt2 --group imbalance --tags exp-f3
+  python scripts/run_experiment.py gpt2 --n-layer 4 --eval-max-examples 128
 """
 
 from __future__ import annotations
@@ -38,13 +44,12 @@ from pokerai.config import (
 from pokerai.training import ensure_wandb_project, wandb_is_configured
 
 
+TRAINERS = ("bigram", "gpt2", "trl", "majority", "features", "weighted-gpt2")
+
+
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument(
-        "trainer",
-        choices=["bigram", "gpt2", "trl"],
-        help="Which training entrypoint to run",
-    )
+    p.add_argument("trainer", choices=TRAINERS, help="Which training entrypoint to run")
     p.add_argument("--hands", type=Path, default=HANDS_CLEAN)
     p.add_argument("--group", default=None, help="WANDB_RUN_GROUP")
     p.add_argument("--name", default=None, help="W&B run name override")
@@ -55,7 +60,7 @@ def _parse_args() -> argparse.Namespace:
         help="Exit with an error if W&B is not configured (for catalog/sweep runs)",
     )
 
-    # GPT-2 / TRL
+    # GPT-2 / TRL / weighted
     p.add_argument("--n-positions", type=int, default=N_POSITIONS)
     p.add_argument("--n-embd", type=int, default=N_EMBD)
     p.add_argument("--n-layer", type=int, default=N_LAYER)
@@ -63,11 +68,33 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--lr", type=float, default=GPT2_LR)
     p.add_argument("--batch-size", type=int, default=GPT2_BATCH_SIZE)
     p.add_argument("--epochs", type=int, default=GPT2_EPOCHS)
+    p.add_argument(
+        "--eval-max-examples",
+        type=int,
+        default=256,
+        help="Val hands for post-train action-type eval / charts (gpt2, weighted-gpt2)",
+    )
+    p.add_argument(
+        "--skip-action-eval",
+        action="store_true",
+        help="Skip post-train generative action evaluation",
+    )
 
     # Bigram
     p.add_argument("--bigram-steps", type=int, default=BIGRAM_STEPS)
     p.add_argument("--bigram-lr", type=float, default=BIGRAM_LR)
     p.add_argument("--bigram-batch-size", type=int, default=BIGRAM_BATCH_SIZE)
+
+    # Features approach
+    p.add_argument(
+        "--method",
+        choices=["rf", "logreg"],
+        default="rf",
+        help="features trainer: RandomForest or LogisticRegression",
+    )
+    p.add_argument("--n-estimators", type=int, default=200)
+    p.add_argument("--max-depth", type=int, default=12)
+    p.add_argument("--C", type=float, default=1.0, help="LogReg inverse regularization")
     return p.parse_args()
 
 
@@ -101,6 +128,22 @@ def _announce_wandb(require: bool) -> None:
         )
 
 
+def _gpt2_hp(args: argparse.Namespace) -> GPT2Hyperparams:
+    if args.n_embd % args.n_head != 0:
+        raise SystemExit(
+            f"n_embd ({args.n_embd}) must be divisible by n_head ({args.n_head})"
+        )
+    return GPT2Hyperparams(
+        n_positions=args.n_positions,
+        n_embd=args.n_embd,
+        n_layer=args.n_layer,
+        n_head=args.n_head,
+        learning_rate=args.lr,
+        batch_size=args.batch_size,
+        num_epochs=args.epochs,
+    )
+
+
 def main() -> None:
     args = _parse_args()
     if args.group:
@@ -123,29 +166,56 @@ def main() -> None:
         )
         return
 
-    if args.n_embd % args.n_head != 0:
-        raise SystemExit(
-            f"n_embd ({args.n_embd}) must be divisible by n_head ({args.n_head})"
-        )
+    if args.trainer == "majority":
+        from pokerai.training.train_majority import main as train
 
-    hp = GPT2Hyperparams(
-        n_positions=args.n_positions,
-        n_embd=args.n_embd,
-        n_layer=args.n_layer,
-        n_head=args.n_head,
-        learning_rate=args.lr,
-        batch_size=args.batch_size,
-        num_epochs=args.epochs,
-    )
+        train(hands_path=args.hands)
+        return
+
+    if args.trainer == "features":
+        from pokerai.training.train_features import main as train
+
+        train(
+            hands_path=args.hands,
+            method=args.method,
+            n_estimators=args.n_estimators,
+            max_depth=args.max_depth,
+            C=args.C,
+        )
+        return
+
+    hp = _gpt2_hp(args)
 
     if args.trainer == "gpt2":
         from pokerai.training.train_gpt2 import main as train
 
-        train(hands_path=args.hands, hp=hp)
-    else:
-        from pokerai.training.train_trl import main as train
+        train(
+            hands_path=args.hands,
+            hp=hp,
+            class_weight=False,
+            run_action_eval=not args.skip_action_eval,
+            eval_max_examples=args.eval_max_examples,
+        )
+        return
 
-        train(hands_path=args.hands, hp=hp)
+    if args.trainer == "weighted-gpt2":
+        from pokerai.training.train_gpt2 import main as train
+        from pokerai.training.train_weighted_gpt2 import MODEL_WEIGHTED_DIR
+
+        train(
+            hands_path=args.hands,
+            output_dir=MODEL_WEIGHTED_DIR,
+            hp=hp,
+            class_weight=True,
+            run_action_eval=not args.skip_action_eval,
+            eval_max_examples=args.eval_max_examples,
+        )
+        return
+
+    # trl
+    from pokerai.training.train_trl import main as train
+
+    train(hands_path=args.hands, hp=hp)
 
 
 if __name__ == "__main__":

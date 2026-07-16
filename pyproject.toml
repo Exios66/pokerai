@@ -17,6 +17,9 @@ dependencies = [
   "wandb>=0.16.0",
   "pyarrow>=14.0.0",
   "accelerate>=0.26.0",
+  "scikit-learn>=1.3.0",
+  "matplotlib>=3.7.0",
+  "joblib>=1.3.0",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +31,9 @@ pokerai-tokenizer = "pokerai.data.tokenizer:main"
 pokerai-bigram = "pokerai.training.train_bigram:main"
 pokerai-gpt2 = "pokerai.training.train_gpt2:main"
 pokerai-trl = "pokerai.training.train_trl:main"
+pokerai-majority = "pokerai.training.train_majority:main"
+pokerai-features = "pokerai.training.train_features:main"
+pokerai-weighted-gpt2 = "pokerai.training.train_weighted_gpt2:main"
 pokerai-predict = "pokerai.inference:main"
 
 [tool.setuptools.packages.find]

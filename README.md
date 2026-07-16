@@ -109,7 +109,16 @@ wandb sync wandb/offline-run-*
 - Compare final validation loss against baseline to assess improvement
 - Check the action-type distribution before over-interpreting loss — poker decision data is typically FOLD-heavy, so raw loss alone can hide poor performance on rarer actions like RAISE
 
-**Full experiment catalog** (configs, what each run showcases, how to run it, and what to look for on W&B): see [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md). Launch tagged runs with `python scripts/run_experiment.py …` (add `--require-wandb` for catalog/sweep runs that must log). Capacity / model-compare sweeps: [`docs/wandb_sweep_gpt2_capacity.yaml`](docs/wandb_sweep_gpt2_capacity.yaml), [`docs/wandb_sweep_model_compare.yaml`](docs/wandb_sweep_model_compare.yaml).
+**Full experiment catalog** (configs, charts, action metrics, alternative approaches): see [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md).
+
+```bash
+python scripts/run_experiment.py majority --group imbalance --tags exp-f2
+python scripts/run_experiment.py features --method rf --group alt-approaches
+python scripts/run_experiment.py weighted-gpt2 --group imbalance --tags exp-f3
+python scripts/evaluate.py --model artifacts/models/gpt2 --max-examples 256
+```
+
+Add `--require-wandb` for catalog/sweep runs that must log. Sweeps: [`docs/wandb_sweep_gpt2_capacity.yaml`](docs/wandb_sweep_gpt2_capacity.yaml), [`docs/wandb_sweep_model_compare.yaml`](docs/wandb_sweep_model_compare.yaml).
 
 ## Notes
 
@@ -120,6 +129,6 @@ wandb sync wandb/offline-run-*
 
 ## Known limitations
 
-- Class imbalance across action types is not yet handled (e.g. no weighted loss)
+- Class imbalance is partially addressed via `majority`, `features` (balanced), and `weighted-gpt2`; no focal loss yet
 - No checkpoint resumption during training
 - Condensed shorthand notation for the POC dataset is not yet implemented — converters pass the (flattened) raw text through
