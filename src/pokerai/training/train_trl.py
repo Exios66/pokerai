@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import torch
@@ -54,6 +55,7 @@ def main(
 
     use_cuda = torch.cuda.is_available()
     # TRL defaults bf16 = not fp16 when bf16 is None, which crashes on CPU.
+    # Let HF Trainer own W&B init via report_to — avoid a second wandb.init().
     training_args = SFTConfig(
         output_dir=str(output_dir),
         num_train_epochs=hp.num_epochs,
@@ -69,7 +71,7 @@ def main(
         bf16=False,
         use_cpu=not use_cuda,
         report_to=wandb_report_to(),
-        run_name="gpt2-trl",
+        run_name=os.environ.get("WANDB_NAME", "gpt2-trl"),
     )
 
     ensure_wandb_project()

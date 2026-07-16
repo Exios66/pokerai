@@ -1,0 +1,29 @@
+# Headline model comparison — launch the three trainers in one W&B group.
+# Prefer the documented manual commands in docs/EXPERIMENTS.md Family A, or:
+#
+#   python scripts/run_experiment.py bigram --group model-comparison --tags exp-a1
+#   python scripts/run_experiment.py gpt2   --group model-comparison --tags exp-a2
+#   python scripts/run_experiment.py trl    --group model-comparison --tags exp-a3
+#
+# Sweep automation (requires wandb agent machine with data + tokenizer ready):
+#   wandb sweep docs/wandb_sweep_model_compare.yaml
+#   wandb agent <sweep_id>
+
+program: scripts/run_experiment.py
+project: pokerai
+method: grid
+metric:
+  name: final_val_loss
+  goal: minimize
+command:
+  - ${env}
+  - python
+  - scripts/run_experiment.py
+  - ${args.trainer}
+  - --group
+  - model-comparison
+  - --tags
+  - model-compare
+parameters:
+  trainer:
+    values: ["bigram", "gpt2", "trl"]

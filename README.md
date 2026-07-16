@@ -100,6 +100,15 @@ python scripts/train_gpt2.py
 wandb sync wandb/offline-run-*
 ```
 
+## Experiment tracking
+
+- **Bigram baseline**: Validation loss ~1.53
+- **GPT-2 model**: Expected to significantly outperform baseline
+- Compare final validation loss against baseline to assess improvement
+- Check the action-type distribution before over-interpreting loss — poker decision data is typically FOLD-heavy, so raw loss alone can hide poor performance on rarer actions like RAISE
+
+**Full experiment catalog** (configs, what each run showcases, how to run it, and what to look for on W&B): see [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md). Launch tagged runs with `python scripts/run_experiment.py …`. Capacity / model-compare sweeps: [`docs/wandb_sweep_gpt2_capacity.yaml`](docs/wandb_sweep_gpt2_capacity.yaml), [`docs/wandb_sweep_model_compare.yaml`](docs/wandb_sweep_model_compare.yaml).
+
 ## Notes
 
 - Large files (data, models, tokenizer) are excluded from git via `.gitignore` and can be regenerated from the scripts above
