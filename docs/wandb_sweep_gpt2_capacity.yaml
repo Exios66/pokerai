@@ -2,8 +2,11 @@
 # Use with scripts/run_experiment.py via a wandb agent entrypoint, or launch
 # individual points manually, e.g.:
 #
-#   python scripts/run_experiment.py gpt2 --n-layer 4 --n-embd 256 --lr 3e-4 \
-#     --group capacity --name gpt2-l4-e256-lr3e4 --tags sweep,capacity
+#   python scripts/run_experiment.py gpt2 --require-wandb --n-layer 4 --n-embd 256 \
+#     --lr 3e-4 --group capacity --name gpt2-l4-e256-lr3e4 --tags sweep,capacity
+#
+# W&B is optional for ordinary training; sweeps should use --require-wandb so a
+# missing login fails loudly instead of training with silent no-op logging.
 #
 #   wandb sweep docs/wandb_sweep_gpt2_capacity.yaml
 #   wandb agent <sweep_id>
@@ -19,6 +22,7 @@ command:
   - python
   - scripts/run_experiment.py
   - gpt2
+  - --require-wandb
   - --n-layer
   - ${args.n_layer}
   - --n-embd

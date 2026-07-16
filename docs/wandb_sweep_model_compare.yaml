@@ -1,9 +1,13 @@
 # Headline model comparison — launch the three trainers in one W&B group.
 # Prefer the documented manual commands in docs/EXPERIMENTS.md Family A, or:
 #
-#   python scripts/run_experiment.py bigram --group model-comparison --tags exp-a1
-#   python scripts/run_experiment.py gpt2   --group model-comparison --tags exp-a2
-#   python scripts/run_experiment.py trl    --group model-comparison --tags exp-a3
+#   python scripts/run_experiment.py bigram --require-wandb --group model-comparison --tags exp-a1
+#   python scripts/run_experiment.py gpt2   --require-wandb --group model-comparison --tags exp-a2
+#   python scripts/run_experiment.py trl    --require-wandb --group model-comparison --tags exp-a3
+#
+# W&B is optional for ordinary training, but sweeps need a configured project
+# (wandb login or WANDB_MODE=offline). Use --require-wandb so a missing login
+# fails loudly instead of training with silent no-op logging.
 #
 # Sweep automation (requires wandb agent machine with data + tokenizer ready):
 #   wandb sweep docs/wandb_sweep_model_compare.yaml
@@ -20,6 +24,7 @@ command:
   - python
   - scripts/run_experiment.py
   - ${args.trainer}
+  - --require-wandb
   - --group
   - model-comparison
   - --tags

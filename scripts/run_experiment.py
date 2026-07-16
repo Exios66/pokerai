@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""Launch a tagged W&B training run with explicit hyperparameters.
+"""Launch a tagged training run with explicit hyperparameters.
+
+W&B logging is optional: trainers only log when W&B is configured
+(API key, saved login, or WANDB_MODE=offline/online/shared). Use
+``--require-wandb`` for catalog/sweep runs that must appear on the dashboard.
 
 Examples:
   python scripts/run_experiment.py bigram
   python scripts/run_experiment.py gpt2 --n-layer 4 --lr 1e-4 --tags depth-4,lr-sweep
   python scripts/run_experiment.py trl --epochs 5 --batch-size 16 --group capacity
+  python scripts/run_experiment.py gpt2 --require-wandb --group capacity --tags exp-b1
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 
 from pokerai.config import (
@@ -28,6 +34,7 @@ from pokerai.config import (
     N_POSITIONS,
     WANDB_PROJECT,
 )
+from pokerai.training import wandb_is_configured
 
 
 def _parse_args() -> argparse.Namespace:
@@ -41,6 +48,11 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--group", default=None, help="WANDB_RUN_GROUP")
     p.add_argument("--name", default=None, help="W&B run name override")
     p.add_argument("--tags", default="", help="Comma-separated WANDB_TAGS")
+    p.add_argument(
+        "--require-wandb",
+        action="store_true",
+        help="Exit with an error if W&B is not configured (for catalog/sweep runs)",
+    )
 
     # GPT-2 / TRL
     p.add_argument("--n-positions", type=int, default=N_POSITIONS)
@@ -58,15 +70,43 @@ def _parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _announce_wandb(require: bool) -> None:
+    os.environ.setdefault("WANDB_PROJECT", WANDB_PROJECT)
+    if wandb_is_configured():
+        mode = os.environ.get("WANDB_MODE", "online (login/key)")
+        name = os.environ.get("WANDB_NAME", "(default trainer name)")
+        group = os.environ.get("WANDB_RUN_GROUP", "(none)")
+        tags = os.environ.get("WANDB_TAGS", "(none)")
+        print(
+            f"W&B logging enabled — project={os.environ['WANDB_PROJECT']} "
+            f"mode={mode} name={name} group={group} tags={tags}"
+        )
+        return
+
+    msg = (
+        "W&B logging disabled — training will run without experiment tracking.\n"
+        "  Enable:  wandb login   OR   export WANDB_MODE=offline\n"
+        "  Silence: export WANDB_MODE=disabled\n"
+        "  Require: pass --require-wandb to fail if logging is unavailable"
+    )
+    print(msg, file=sys.stderr)
+    if require:
+        raise SystemExit(
+            "error: --require-wandb was set but W&B is not configured "
+            "(no API key / login, and WANDB_MODE is not offline/online/shared)"
+        )
+
+
 def main() -> None:
     args = _parse_args()
-    os.environ.setdefault("WANDB_PROJECT", WANDB_PROJECT)
     if args.group:
         os.environ["WANDB_RUN_GROUP"] = args.group
     if args.tags:
         os.environ["WANDB_TAGS"] = args.tags
     if args.name:
         os.environ["WANDB_NAME"] = args.name
+
+    _announce_wandb(require=args.require_wandb)
 
     if args.trainer == "bigram":
         from pokerai.training.train_bigram import main as train
