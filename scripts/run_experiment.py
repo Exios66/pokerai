@@ -32,9 +32,10 @@ from pokerai.config import (
     N_HEAD,
     N_LAYER,
     N_POSITIONS,
+    WANDB_ENTITY,
     WANDB_PROJECT,
 )
-from pokerai.training import wandb_is_configured
+from pokerai.training import ensure_wandb_project, wandb_is_configured
 
 
 def _parse_args() -> argparse.Namespace:
@@ -71,14 +72,16 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _announce_wandb(require: bool) -> None:
-    os.environ.setdefault("WANDB_PROJECT", WANDB_PROJECT)
+    ensure_wandb_project()
     if wandb_is_configured():
         mode = os.environ.get("WANDB_MODE", "online (login/key)")
         name = os.environ.get("WANDB_NAME", "(default trainer name)")
         group = os.environ.get("WANDB_RUN_GROUP", "(none)")
         tags = os.environ.get("WANDB_TAGS", "(none)")
+        entity = os.environ.get("WANDB_ENTITY", WANDB_ENTITY)
+        project = os.environ.get("WANDB_PROJECT", WANDB_PROJECT)
         print(
-            f"W&B logging enabled — project={os.environ['WANDB_PROJECT']} "
+            f"W&B logging enabled — {entity}/{project} "
             f"mode={mode} name={name} group={group} tags={tags}"
         )
         return
@@ -87,7 +90,8 @@ def _announce_wandb(require: bool) -> None:
         "W&B logging disabled — training will run without experiment tracking.\n"
         "  Enable:  wandb login   OR   export WANDB_MODE=offline\n"
         "  Silence: export WANDB_MODE=disabled\n"
-        "  Require: pass --require-wandb to fail if logging is unavailable"
+        "  Require: pass --require-wandb to fail if logging is unavailable\n"
+        f"  Target:  https://wandb.ai/{WANDB_ENTITY}/{WANDB_PROJECT}"
     )
     print(msg, file=sys.stderr)
     if require:

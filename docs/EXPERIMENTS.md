@@ -1,6 +1,6 @@
 # W&B Experiment Catalog — Poker AI
 
-This document is a complete catalog of experiments you can run against this repository’s models and configurations. When Weights & Biases is configured, runs log to the shared project **`pokerai`**. Use it to compare baselines, ablations, and training backends with a consistent evaluation story.
+This document is a complete catalog of experiments you can run against this repository’s models and configurations. When Weights & Biases is configured, runs log to the shared project **[`mooslin-university-of-wisconsin-madison/poker-ai`](https://wandb.ai/mooslin-university-of-wisconsin-madison/poker-ai)**. Use it to compare baselines, ablations, and training backends with a consistent evaluation story.
 
 **W&B is optional.** Trainers only call `wandb.init` / set `report_to="wandb"` when an API key is present, `WANDB_MODE` is `offline`/`online`/`shared`, or you are already logged in. Otherwise training proceeds with **no** W&B logging (`report_to="none"`). Catalog and sweep workflows that need comparable panels should enable W&B explicitly (see below) or pass `--require-wandb` to the launcher.
 
@@ -44,7 +44,8 @@ wandb sync wandb/offline-run-*
 **W&B hygiene (recommended whenever you want comparable panels):**
 
 ```bash
-export WANDB_PROJECT=pokerai
+export WANDB_ENTITY=mooslin-university-of-wisconsin-madison
+export WANDB_PROJECT=poker-ai
 export WANDB_RUN_GROUP="<experiment-family>"   # e.g. model-comparison
 export WANDB_TAGS="exp01,gpt2,baseline"
 # optionally: export WANDB_NAME="gpt2-raw-lr3e4"
@@ -423,9 +424,10 @@ Minimal sweep for a compelling public project page:
 
 ```yaml
 # docs/wandb_sweep_model_compare.yaml
-program: scripts/train_gpt2.py   # or a small runner that selects trainer
+program: scripts/run_experiment.py
+entity: mooslin-university-of-wisconsin-madison
+project: poker-ai
 method: grid
-project: pokerai
 parameters:
   # express via a runner that reads WANDB/sweep env into GPT2Hyperparams
   model_kind:
@@ -487,7 +489,7 @@ For each completed experiment, record:
 |------|----------|
 | GPT-2 architecture & optim | `src/pokerai/config.py` → `GPT2Hyperparams` |
 | Bigram optim | `BIGRAM_LR`, `BIGRAM_BATCH_SIZE`, `BIGRAM_STEPS` |
-| W&B project | `WANDB_PROJECT = "pokerai"` (logging only when W&B is configured; see setup) |
+| W&B project | `WANDB_ENTITY` / `WANDB_PROJECT` → `mooslin-university-of-wisconsin-madison/poker-ai` (logging only when W&B is configured; see setup) |
 | Masked encode | `pokerai.data.encode_with_mask` (offset-based boundary; keep-end truncation) |
 | TRL completion-only | Pre-tokenized via `encode_with_mask` + `skip_prepare_dataset=True` (action labels already `-100`-masked) |
 | Paths | `HANDS_CLEAN`, `TOKENIZER_DIR`, `MODEL_*_DIR` |

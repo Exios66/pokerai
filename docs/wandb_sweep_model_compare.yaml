@@ -14,7 +14,8 @@
 #   wandb agent <sweep_id>
 
 program: scripts/run_experiment.py
-project: pokerai
+entity: mooslin-university-of-wisconsin-madison
+project: poker-ai
 method: grid
 metric:
   name: final_val_loss
