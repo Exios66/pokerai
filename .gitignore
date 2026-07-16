@@ -10,8 +10,6 @@ build/
 
 # Generated artifacts
 artifacts/
-tokenizer/
-model_out_trl/
 wandb/
 
 # Hand history text (regenerate via scripts/prepare_data.py)

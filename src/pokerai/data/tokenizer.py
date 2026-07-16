@@ -1,4 +1,4 @@
-"""Train a domain BPE tokenizer on poker hand histories."""
+"""Train a domain BPE tokenizer on cleaned poker hand histories."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from transformers import PreTrainedTokenizerFast
 from pokerai.config import (
     BOS_TOKEN,
     EOS_TOKEN,
+    HANDS_CLEAN,
     HANDS_RAW,
     N_POSITIONS,
     PAD_TOKEN,
@@ -19,10 +20,22 @@ from pokerai.config import (
 
 
 def train_tokenizer(
-    hands_path: Path = HANDS_RAW,
+    hands_path: Path | None = None,
     output_dir: Path = TOKENIZER_DIR,
     vocab_size: int = VOCAB_SIZE,
 ) -> PreTrainedTokenizerFast:
+    # Prefer cleaned hands so merges match what models actually train on.
+    if hands_path is None:
+        if HANDS_CLEAN.exists():
+            hands_path = HANDS_CLEAN
+        elif HANDS_RAW.exists():
+            hands_path = HANDS_RAW
+        else:
+            raise FileNotFoundError(
+                f"Missing {HANDS_CLEAN} (and {HANDS_RAW}). "
+                "Run: python scripts/prepare_data.py"
+            )
+
     if not hands_path.exists():
         raise FileNotFoundError(
             f"Missing {hands_path}. Run: python scripts/prepare_data.py"
@@ -54,10 +67,14 @@ def train_tokenizer(
 
 
 def main() -> None:
-    tokenizer = train_tokenizer()
-    lines = HANDS_RAW.read_text(encoding="utf-8").splitlines()
+    hands_path = HANDS_CLEAN if HANDS_CLEAN.exists() else HANDS_RAW
+    tokenizer = train_tokenizer(hands_path=hands_path)
+    lines = hands_path.read_text(encoding="utf-8").splitlines()
+    if not lines:
+        raise ValueError(f"{hands_path} has no lines to inspect")
     sample = lines[0]
     ids = tokenizer(sample)["input_ids"]
+    print(f"Tokenizer corpus: {hands_path}")
     print("Sample hand:", sample[:120], "...")
     print("Token count (sample):", len(ids))
 

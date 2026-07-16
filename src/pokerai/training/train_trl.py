@@ -11,16 +11,15 @@ from pokerai.config import (
     GPT2Hyperparams,
     HANDS_CLEAN,
     MODEL_TRL_DIR,
-    WANDB_PROJECT,
 )
-from pokerai.data import load_text_split, split_prompt_completion
+from pokerai.data import encode_with_mask, load_text_split
 from pokerai.models import build_gpt2
-from pokerai.training import get_device, load_tokenizer
-
-
-def _map_prompt_completion(example: dict) -> dict:
-    prompt, completion = split_prompt_completion(example["text"])
-    return {"prompt": prompt, "completion": completion}
+from pokerai.training import (
+    ensure_wandb_project,
+    get_device,
+    load_tokenizer,
+    wandb_report_to,
+)
 
 
 def main(
@@ -33,14 +32,28 @@ def main(
     model = build_gpt2(tokenizer, hp)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model has {n_params:,} parameters")
-    print("Device preference:", get_device())
+    device = get_device()
+    print("Device preference:", device)
+
+    # Pre-tokenize with the same encode_with_mask path as the raw GPT-2 loop:
+    # BOS/EOS, offset-based action mask, keep-end truncation. TRL's built-in
+    # truncation_mode="keep_end" is deprecated and defaults to keep_start,
+    # which can drop the action tokens entirely on long hands.
+    def _tokenize(example: dict) -> dict:
+        ids, labels = encode_with_mask(example["text"], tokenizer, hp.n_positions)
+        return {"input_ids": ids, "labels": labels}
 
     split = load_text_split(hands_path)
-    train_dataset = split["train"].map(_map_prompt_completion, remove_columns=["text"])
-    eval_dataset = split["test"].map(_map_prompt_completion, remove_columns=["text"])
-    print(train_dataset[0])
+    train_dataset = split["train"].map(_tokenize, remove_columns=["text"])
+    eval_dataset = split["test"].map(_tokenize, remove_columns=["text"])
+    print("Example 0 input_ids length:", len(train_dataset[0]["input_ids"]))
+    print(
+        "Example 0 supervised tokens:",
+        sum(1 for t in train_dataset[0]["labels"] if t != -100),
+    )
 
-    # Let HF Trainer own W&B init via report_to — avoid a second wandb.init().
+    use_cuda = torch.cuda.is_available()
+    # TRL defaults bf16 = not fp16 when bf16 is None, which crashes on CPU.
     training_args = SFTConfig(
         output_dir=str(output_dir),
         num_train_epochs=hp.num_epochs,
@@ -49,17 +62,17 @@ def main(
         eval_strategy="epoch",
         logging_steps=50,
         learning_rate=hp.learning_rate,
-        max_length=hp.n_positions,  # must match model n_positions
-        completion_only_loss=True,
-        fp16=torch.cuda.is_available(),
-        report_to="wandb",
+        # Dataset already truncated + masked; skip TRL's prepare/tokenize.
+        max_length=None,
+        dataset_kwargs={"skip_prepare_dataset": True},
+        fp16=use_cuda,
+        bf16=False,
+        use_cpu=not use_cuda,
+        report_to=wandb_report_to(),
         run_name="gpt2-trl",
     )
 
-    # Seed W&B project name before Trainer creates the run.
-    import os
-
-    os.environ.setdefault("WANDB_PROJECT", WANDB_PROJECT)
+    ensure_wandb_project()
 
     trainer = SFTTrainer(
         model=model,

@@ -8,7 +8,6 @@ from typing import cast
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import wandb
 from torch.utils.data import DataLoader, Dataset
 
 from pokerai.config import (
@@ -19,7 +18,7 @@ from pokerai.config import (
 )
 from pokerai.data import encode_with_mask, load_text_split
 from pokerai.models import build_gpt2
-from pokerai.training import get_device, load_tokenizer
+from pokerai.training import get_device, load_tokenizer, wandb_is_configured
 
 
 class HandsDataset(Dataset):
@@ -59,6 +58,8 @@ def main(
     hp = hp or GPT2Hyperparams()
     tokenizer = load_tokenizer()
     vocab_size = len(tokenizer)
+    if tokenizer.pad_token_id is None:
+        raise ValueError("Tokenizer is missing pad_token_id")
     model = build_gpt2(tokenizer, hp)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model has {n_params:,} parameters")
@@ -84,19 +85,23 @@ def main(
         val_ds, batch_size=hp.batch_size, shuffle=False, collate_fn=collate
     )
 
-    wandb.init(
-        project=WANDB_PROJECT,
-        name="gpt2-raw",
-        config={
-            "model": "gpt2",
-            "n_params": n_params,
-            "vocab_size": vocab_size,
-            "device": device,
-            "train_examples": len(train_ds),
-            "eval_examples": len(val_ds),
-            **hp.as_dict(),
-        },
-    )
+    use_wandb = wandb_is_configured()
+    if use_wandb:
+        import wandb
+
+        wandb.init(
+            project=WANDB_PROJECT,
+            name="gpt2-raw",
+            config={
+                "model": "gpt2",
+                "n_params": n_params,
+                "vocab_size": vocab_size,
+                "device": device,
+                "train_examples": len(train_ds),
+                "eval_examples": len(val_ds),
+                **hp.as_dict(),
+            },
+        )
 
     ids, labels = train_ds[0]
     print("\nTokens:", tokenizer.convert_ids_to_tokens(ids))
@@ -156,19 +161,28 @@ def main(
 
             if step % 50 == 0:
                 print(f"epoch {epoch} step {step:5d} | train loss {loss.item():.4f}")
-                wandb.log({"train/loss": loss.item(), "epoch": epoch}, step=step)
+                if use_wandb:
+                    import wandb
+
+                    wandb.log({"train/loss": loss.item(), "epoch": epoch}, step=step)
             step += 1
 
         val_loss = run_eval()
         print(f"== end of epoch {epoch}: val loss {val_loss:.4f} ==")
-        wandb.log({"val/loss": val_loss, "epoch": epoch}, step=step)
+        if use_wandb:
+            import wandb
+
+            wandb.log({"val/loss": val_loss, "epoch": epoch}, step=step)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(str(output_dir))
     tokenizer.save_pretrained(str(output_dir))
     print(f"\nSaved model to {output_dir}")
-    wandb.summary["final_val_loss"] = val_loss
-    wandb.finish()
+    if use_wandb:
+        import wandb
+
+        wandb.summary["final_val_loss"] = val_loss
+        wandb.finish()
 
 
 if __name__ == "__main__":
