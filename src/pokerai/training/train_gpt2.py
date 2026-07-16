@@ -15,11 +15,17 @@ from pokerai.config import (
     GPT2Hyperparams,
     HANDS_CLEAN,
     MODEL_GPT2_DIR,
+    WANDB_ENTITY,
     WANDB_PROJECT,
 )
 from pokerai.data import encode_with_mask, load_text_split
 from pokerai.models import build_gpt2
-from pokerai.training import get_device, load_tokenizer, wandb_is_configured
+from pokerai.training import (
+    ensure_wandb_project,
+    get_device,
+    load_tokenizer,
+    wandb_is_configured,
+)
 
 
 class HandsDataset(Dataset):
@@ -90,7 +96,9 @@ def main(
     if use_wandb:
         import wandb
 
+        ensure_wandb_project()
         wandb.init(
+            entity=WANDB_ENTITY,
             project=WANDB_PROJECT,
             name=os.environ.get("WANDB_NAME", "gpt2-raw"),
             config={

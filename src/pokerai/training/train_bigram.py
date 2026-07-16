@@ -15,11 +15,17 @@ from pokerai.config import (
     BIGRAM_STEPS,
     HANDS_CLEAN,
     MODEL_BIGRAM_DIR,
+    WANDB_ENTITY,
     WANDB_PROJECT,
 )
 from pokerai.data import encode_with_mask, load_text_split
 from pokerai.models import Bigram
-from pokerai.training import get_device, load_tokenizer, wandb_is_configured
+from pokerai.training import (
+    ensure_wandb_project,
+    get_device,
+    load_tokenizer,
+    wandb_is_configured,
+)
 
 
 def _action_pairs(sequences: list[tuple[list[int], list[int]]]):
@@ -67,7 +73,9 @@ def main(
     if use_wandb:
         import wandb
 
+        ensure_wandb_project()
         wandb.init(
+            entity=WANDB_ENTITY,
             project=WANDB_PROJECT,
             name=os.environ.get("WANDB_NAME", "bigram-baseline"),
             config={

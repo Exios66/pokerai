@@ -19,7 +19,9 @@ MODEL_TRL_DIR = ARTIFACTS_DIR / "models" / "gpt2_trl"
 MODEL_BIGRAM_DIR = ARTIFACTS_DIR / "models" / "bigram"
 
 HF_DATASET = "SoelMgd/Poker_Dataset"
-WANDB_PROJECT = "pokerai"
+# https://wandb.ai/mooslin-university-of-wisconsin-madison/poker-ai
+WANDB_ENTITY = "mooslin-university-of-wisconsin-madison"
+WANDB_PROJECT = "poker-ai"
 
 # Special tokens — BOS and EOS must be distinct for clean generation stopping.
 BOS_TOKEN = "<|startoftext|>"

@@ -8,8 +8,10 @@ from pokerai.config import (
     N_POSITIONS,
     PAD_TOKEN,
     REPO_ROOT,
+    WANDB_ENTITY,
+    WANDB_PROJECT,
 )
-from pokerai.training import wandb_is_configured, wandb_report_to
+from pokerai.training import ensure_wandb_project, wandb_is_configured, wandb_report_to
 
 
 def test_special_tokens_are_distinct():
@@ -24,6 +26,19 @@ def test_context_length():
 def test_repo_root_exists():
     assert (REPO_ROOT / "README.md").exists()
     assert (REPO_ROOT / "src" / "pokerai").is_dir()
+
+
+def test_wandb_team_project():
+    assert WANDB_ENTITY == "mooslin-university-of-wisconsin-madison"
+    assert WANDB_PROJECT == "poker-ai"
+
+
+def test_ensure_wandb_project_sets_env(monkeypatch):
+    monkeypatch.delenv("WANDB_ENTITY", raising=False)
+    monkeypatch.delenv("WANDB_PROJECT", raising=False)
+    ensure_wandb_project()
+    assert os.environ["WANDB_ENTITY"] == WANDB_ENTITY
+    assert os.environ["WANDB_PROJECT"] == WANDB_PROJECT
 
 
 def test_wandb_disabled_by_env(monkeypatch):

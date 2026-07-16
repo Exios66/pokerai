@@ -8,7 +8,7 @@ from pathlib import Path
 import torch
 from transformers import PreTrainedTokenizerFast
 
-from pokerai.config import TOKENIZER_DIR, WANDB_PROJECT
+from pokerai.config import TOKENIZER_DIR, WANDB_ENTITY, WANDB_PROJECT
 
 
 def get_device() -> str:
@@ -51,4 +51,6 @@ def wandb_report_to() -> str:
 
 
 def ensure_wandb_project() -> None:
+    """Point W&B at the shared team project (entity/project)."""
+    os.environ.setdefault("WANDB_ENTITY", WANDB_ENTITY)
     os.environ.setdefault("WANDB_PROJECT", WANDB_PROJECT)

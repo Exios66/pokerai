@@ -90,7 +90,9 @@ pokerai/
 
 ## Tracking runs with W&B
 
-When configured, all training scripts log to the same `pokerai` W&B project so runs are comparable. TRL uses `TrainingArguments(report_to=...)`; the raw-loop scripts call `wandb.init` / `wandb.log` only when W&B is available.
+When configured, all training scripts log to
+[`mooslin-university-of-wisconsin-madison/poker-ai`](https://wandb.ai/mooslin-university-of-wisconsin-madison/poker-ai)
+so runs are comparable. TRL uses `TrainingArguments(report_to=...)`; the raw-loop scripts call `wandb.init` / `wandb.log` only when W&B is available.
 
 On offline compute nodes:
 
