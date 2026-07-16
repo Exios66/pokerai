@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import torch
@@ -41,6 +42,7 @@ def main(
     print(train_dataset[0])
 
     # Let HF Trainer own W&B init via report_to — avoid a second wandb.init().
+    os.environ.setdefault("WANDB_PROJECT", WANDB_PROJECT)
     training_args = SFTConfig(
         output_dir=str(output_dir),
         num_train_epochs=hp.num_epochs,
@@ -53,13 +55,8 @@ def main(
         completion_only_loss=True,
         fp16=torch.cuda.is_available(),
         report_to="wandb",
-        run_name="gpt2-trl",
+        run_name=os.environ.get("WANDB_NAME", "gpt2-trl"),
     )
-
-    # Seed W&B project name before Trainer creates the run.
-    import os
-
-    os.environ.setdefault("WANDB_PROJECT", WANDB_PROJECT)
 
     trainer = SFTTrainer(
         model=model,

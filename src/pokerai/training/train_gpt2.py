@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import cast
 
@@ -86,7 +87,7 @@ def main(
 
     wandb.init(
         project=WANDB_PROJECT,
-        name="gpt2-raw",
+        name=os.environ.get("WANDB_NAME", "gpt2-raw"),
         config={
             "model": "gpt2",
             "n_params": n_params,

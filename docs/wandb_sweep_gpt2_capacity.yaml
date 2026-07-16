@@ -1,0 +1,52 @@
+# Architecture + LR grid for raw GPT-2 (Family B + C1).
+# Use with scripts/run_experiment.py via a wandb agent entrypoint, or launch
+# individual points manually, e.g.:
+#
+#   python scripts/run_experiment.py gpt2 --n-layer 4 --n-embd 256 --lr 3e-4 \
+#     --group capacity --name gpt2-l4-e256-lr3e4 --tags sweep,capacity
+#
+#   wandb sweep docs/wandb_sweep_gpt2_capacity.yaml
+#   wandb agent <sweep_id>
+
+program: scripts/run_experiment.py
+project: pokerai
+method: grid
+metric:
+  name: final_val_loss
+  goal: minimize
+command:
+  - ${env}
+  - python
+  - scripts/run_experiment.py
+  - gpt2
+  - --n-layer
+  - ${args.n_layer}
+  - --n-embd
+  - ${args.n_embd}
+  - --n-head
+  - ${args.n_head}
+  - --n-positions
+  - ${args.n_positions}
+  - --lr
+  - ${args.learning_rate}
+  - --batch-size
+  - ${args.batch_size}
+  - --epochs
+  - ${args.num_epochs}
+  - --group
+  - capacity-sweep
+parameters:
+  n_layer:
+    values: [2, 4, 6, 8]
+  n_embd:
+    values: [128, 256, 512]
+  n_head:
+    values: [8]
+  n_positions:
+    values: [384]
+  learning_rate:
+    values: [0.0001, 0.0003, 0.001]
+  batch_size:
+    values: [32]
+  num_epochs:
+    values: [3]
