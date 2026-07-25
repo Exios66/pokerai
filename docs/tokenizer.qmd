@@ -1,0 +1,69 @@
+---
+title: "Tokenizer"
+subtitle: "Domain BPE vocabulary for poker hand histories"
+---
+
+# Why a custom tokenizer?
+
+Poker states are dense with symbols (`BB`, `P1`, suit ranks, stack sizes). A
+general English BPE wastes capacity on irrelevant merges. Training a
+Byte-Level BPE on the hand corpus yields a compact vocabulary tuned to this
+domain.
+
+# Training
+
+```bash
+python scripts/train_tokenizer.py
+# or: pokerai-tokenizer
+```
+
+```{python}
+#| label: tbl-tok-settings
+#| tbl-cap: "Tokenizer settings from `pokerai.config` / `pokerai.data.tokenizer`."
+
+from pokerai import config
+import pandas as pd
+
+pd.DataFrame(
+    [
+        {"Setting": "Algorithm", "Value": "Byte-Level BPE"},
+        {"Setting": "Target vocab size", "Value": config.VOCAB_SIZE},
+        {"Setting": "Min frequency", "Value": 2},
+        {"Setting": "BOS", "Value": config.BOS_TOKEN},
+        {"Setting": "EOS", "Value": config.EOS_TOKEN},
+        {"Setting": "PAD", "Value": config.PAD_TOKEN},
+        {"Setting": "model_max_length", "Value": config.N_POSITIONS},
+        {"Setting": "Input file", "Value": str(config.HANDS_RAW.relative_to(config.REPO_ROOT))},
+        {"Setting": "Output dir", "Value": str(config.TOKENIZER_DIR.relative_to(config.REPO_ROOT))},
+    ]
+)
+```
+
+# Special tokens
+
+::: {.callout-important}
+## BOS and EOS must be distinct
+
+`<|startoftext|>` and `<|endoftext|>` are separate tokens. If BOS and EOS share
+an ID, the model cannot tell “hand starting” from “hand ending,” which corrupts
+sequence-boundary learning. After renaming specials, **retrain the tokenizer and
+rerun every downstream step**—token IDs shift.
+:::
+
+# Diagnostics printed at train time
+
+The tokenizer script reports:
+
+- sample hand + token count
+- max / average tokens per hand across the corpus
+
+Use the max length to confirm `N_POSITIONS` (default **384**) is adequate. Long
+sequences are truncated from the **front** during encoding so the action tokens
+at the end are preserved.
+
+# Artifacts
+
+Saved under `artifacts/tokenizer/` (gitignored):
+
+- `tokenizer.json`
+- Hugging Face `PreTrainedTokenizerFast` files (`tokenizer_config.json`, etc.)

@@ -1,0 +1,153 @@
+/*-- scss:defaults --*/
+$link-color: #C5050C;
+$toc-color: #C5050C;
+
+/*-- scss:rules --*/
+#title-block-header {
+  border-bottom: 3px solid #C5050C;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+}
+
+.quarto-title-meta {
+  font-size: 0.95rem;
+}
+
+div.callout-note {
+  border-left-color: #C5050C;
+}
+
+div.callout-tip {
+  border-left-color: #047857;
+}
+
+div.callout-warning {
+  border-left-color: #b45309;
+}
+
+/* APA-ish figure/table captions */
+.figure-caption,
+.quarto-float-fig > figcaption,
+.quarto-float-tbl > figcaption,
+.table-caption {
+  color: #222;
+  font-size: 0.95rem;
+  text-align: left;
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.figure-caption .figure-caption-prefix,
+.quarto-float-fig > figcaption > span.figure-caption-prefix,
+figcaption.quarto-float-caption-bottom > span:first-child {
+  font-weight: 700;
+  font-style: normal;
+}
+
+.figure-caption,
+.quarto-float-fig > figcaption {
+  font-style: italic;
+}
+
+.table-caption,
+.quarto-float-tbl > figcaption {
+  font-style: italic;
+}
+
+.table-caption .table-caption-prefix,
+.quarto-float-tbl > figcaption > span:first-child {
+  font-weight: 700;
+  font-style: normal;
+}
+
+.quarto-figure {
+  margin-top: 1.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.quarto-figure img {
+  background: #fff;
+  border: 0;
+}
+
+/* GitHub access buttons under title */
+.github-access {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0 0 1.5rem 0;
+  align-items: center;
+}
+
+.github-access .github-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid rgba(197, 5, 12, 0.35);
+  border-radius: 0.35rem;
+  color: #C5050C;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+  background: rgba(197, 5, 12, 0.04);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.github-access .github-btn:hover {
+  background: rgba(197, 5, 12, 0.1);
+  border-color: #C5050C;
+  color: #9a0409;
+  text-decoration: none;
+}
+
+.github-access .github-btn .bi {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+/* Pipeline / research focus presentation blocks */
+.pipeline-block {
+  margin: 1.25rem 0 1.75rem 0;
+  padding: 1rem 1.15rem 1.15rem 1.15rem;
+  border-left: 4px solid #C5050C;
+  background: linear-gradient(180deg, rgba(197, 5, 12, 0.04), rgba(0, 0, 0, 0.015));
+}
+
+.pipeline-block > h3 {
+  margin-top: 0;
+  margin-bottom: 0.65rem;
+  color: #222;
+}
+
+.pipeline-block p {
+  margin-bottom: 0.55rem;
+}
+
+.pipeline-block table {
+  margin-bottom: 0.25rem;
+  width: 100%;
+}
+
+.pipeline-block table th {
+  background: rgba(197, 5, 12, 0.08);
+  font-weight: 700;
+}
+
+.pipeline-block table td:first-child,
+.pipeline-block table th:first-child {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Soft atmospheric page background */
+body {
+  background:
+    radial-gradient(1200px 500px at 10% -10%, rgba(197, 5, 12, 0.06), transparent 55%),
+    radial-gradient(900px 420px at 100% 0%, rgba(15, 23, 42, 0.04), transparent 50%),
+    #fafafa;
+}
+
+main.content {
+  background: rgba(255, 255, 255, 0.88);
+}

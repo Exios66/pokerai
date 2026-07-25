@@ -1,0 +1,48 @@
+---
+title: "Models"
+subtitle: "Bigram baseline and GPT-2 factory"
+---
+
+# Bigram baseline
+
+`pokerai.models.Bigram` is a next-token logit table: an embedding of shape
+`(vocab_size, vocab_size)`. Training restricts pairs to the **supervised action
+region** so the baseline is a fair comparison against GPT-2’s masked loss.
+
+| Property | Value |
+| --- | --- |
+| Expected validation loss | ≈ **1.53** |
+| Role | Sanity check — GPT-2 must beat this |
+| Artifacts | `artifacts/models/bigram/` |
+
+```bash
+python scripts/train_bigram.py
+# or: pokerai-bigram
+```
+
+# GPT-2 factory
+
+`build_gpt2(tokenizer, hp)` constructs a randomly initialized
+`transformers.GPT2LMHeadModel` with vocab size taken from the trained tokenizer.
+
+```{python}
+#| label: tbl-gpt2
+#| tbl-cap: "Default GPT-2 hyperparameters (`GPT2Hyperparams` / config constants)."
+
+from pokerai.config import GPT2Hyperparams
+import pandas as pd
+
+hp = GPT2Hyperparams()
+pd.DataFrame([{"Hyperparameter": k, "Value": v} for k, v in hp.as_dict().items()])
+```
+
+Approximate parameter count for 6 layers × 256 hidden × 8 heads with a ~4k vocab
+is on the order of a few million parameters—small enough for single-GPU
+iteration, large enough to beat a bigram when masking and data are correct.
+
+# Design notes
+
+- **Random init, not pretrained English GPT-2** — the token space is poker-specific.
+- Config wires `bos_token_id`, `eos_token_id`, and `pad_token_id` from the
+  tokenizer into `GPT2Config`.
+- Context length (`n_positions`) must match TRL `max_length` and encoding caps.

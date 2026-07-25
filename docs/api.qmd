@@ -1,0 +1,80 @@
+---
+title: "Package API"
+subtitle: "Reference for `pokerai` modules"
+---
+
+# `pokerai.config`
+
+Central paths and hyperparameters.
+
+```{python}
+#| label: show-config-paths
+#| code-fold: true
+
+from pokerai import config
+import pandas as pd
+
+pd.DataFrame(
+    [
+        {"Name": "REPO_ROOT", "Value": str(config.REPO_ROOT)},
+        {"Name": "DATA_DIR", "Value": str(config.DATA_DIR)},
+        {"Name": "HANDS_RAW", "Value": str(config.HANDS_RAW)},
+        {"Name": "HANDS_CLEAN", "Value": str(config.HANDS_CLEAN)},
+        {"Name": "TOKENIZER_DIR", "Value": str(config.TOKENIZER_DIR)},
+        {"Name": "MODEL_GPT2_DIR", "Value": str(config.MODEL_GPT2_DIR)},
+        {"Name": "MODEL_TRL_DIR", "Value": str(config.MODEL_TRL_DIR)},
+        {"Name": "MODEL_BIGRAM_DIR", "Value": str(config.MODEL_BIGRAM_DIR)},
+        {"Name": "HF_DATASET", "Value": config.HF_DATASET},
+        {"Name": "WANDB_PROJECT", "Value": config.WANDB_PROJECT},
+    ]
+)
+```
+
+`GPT2Hyperparams` is a frozen dataclass exposing `as_dict()` for W&B configs.
+
+# `pokerai.data`
+
+| Function | Purpose |
+| --- | --- |
+| `to_line(question, answer)` | Flatten whitespace; join with comma |
+| `clean_line(line)` | Normalize `CALL 0BB` / `FOLDxBB` |
+| `fetch_hands(path)` | Download HF dataset → text file |
+| `write_cleaned(lines, path)` | Apply cleaning and write |
+| `load_text_split(path)` | HF `text` dataset + train/test split |
+| `split_prompt_completion(text)` | Last-comma split |
+| `encode_with_mask(text, tok, max_length)` | IDs + labels with action-only supervision |
+| `train_tokenizer(...)` | Byte-Level BPE + HF wrapper |
+
+# `pokerai.models`
+
+| Symbol | Purpose |
+| --- | --- |
+| `Bigram` | Embedding table next-token model |
+| `build_gpt2(tokenizer, hp)` | Random-init `GPT2LMHeadModel` |
+| `default_gpt2_config_kwargs()` | Dict of default architecture sizes |
+
+# `pokerai.training`
+
+| Module | Entry | Notes |
+| --- | --- | --- |
+| `train_bigram` | `main()` | Action-pair CE; logs to W&B |
+| `train_gpt2` | `main()` | Raw loop; masked labels |
+| `train_trl` | `main()` | TRL SFT; `completion_only_loss` |
+| helpers | `get_device()`, `load_tokenizer()` | Shared utilities |
+
+# `pokerai.inference`
+
+| Function | Purpose |
+| --- | --- |
+| `load_model(model_dir)` | Load GPT-2 + tokenizer from a checkpoint dir |
+| `predict_action(state, model, tokenizer)` | Greedy generation of the action string |
+| `main()` | argparse CLI |
+
+# Tests
+
+```bash
+pytest -q
+```
+
+Primary coverage lives in `tests/test_data.py` (cleaning + mask encoding) and
+`tests/test_config.py` (path / hyperparameter sanity).

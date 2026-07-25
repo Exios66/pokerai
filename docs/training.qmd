@@ -1,0 +1,68 @@
+---
+title: "Training"
+subtitle: "Masked GPT-2 loops — raw PyTorch and TRL"
+---
+
+# Completion-only / masked objective
+
+Both trainers supervise **only action tokens**:
+
+1. Split each hand at the last comma → `(prompt, completion)`.
+2. Build `input_ids = [BOS] + prompt_ids + completion_ids + [EOS]`.
+3. Set labels to `-100` on BOS + prompt; keep real IDs on completion + EOS.
+4. If length exceeds `n_positions`, drop tokens from the **front** so the action
+   remains.
+
+::: {.callout-note}
+## Boundary alignment
+
+BPE merge behavior can differ when a substring is tokenized alone versus in
+context. Prefer locating the prompt/answer boundary from a carefully controlled
+split (package path) or a single full-text pass with offset mapping—never assume
+that tokenizing the prompt in isolation and concatenating IDs is lossless.
+:::
+
+# Raw PyTorch loop
+
+```bash
+python scripts/train_gpt2.py
+# or: pokerai-gpt2
+```
+
+Highlights from `pokerai.training.train_gpt2`:
+
+- Custom `HandsDataset` + collate that pads `input_ids`, `labels`, and attention
+  masks
+- AdamW at `3e-4`, 3 epochs, batch 32 (defaults)
+- Per-epoch validation cross-entropy
+- Direct `wandb.init` / `wandb.log` into project `pokerai`
+- Saves model + tokenizer under `artifacts/models/gpt2/`
+
+# TRL SFTTrainer
+
+```bash
+python scripts/train_trl.py
+# or: pokerai-trl
+```
+
+Highlights from `pokerai.training.train_trl`:
+
+- Maps each line to `{"prompt", "completion"}` via `split_prompt_completion`
+- `SFTConfig(completion_only_loss=True, max_length=n_positions, …)`
+- `report_to="wandb"`, `run_name="gpt2-trl"`
+- FP16 when CUDA is available
+- Saves under `artifacts/models/gpt2_trl/`
+
+# Comparing runs
+
+All trainers log to the same W&B project so bigram, raw GPT-2, and TRL runs are
+directly comparable. See [Experiment tracking](tracking.qmd).
+
+# Hardware tips
+
+| Situation | Suggestion |
+| --- | --- |
+| CUDA available | Default batch 32; FP16 on TRL path |
+| CPU-only | Expect slow GPT-2 training; start with bigram + tiny subset |
+| OOM | Lower `GPT2_BATCH_SIZE` in config or CLI wrappers |
+| Offline cluster | `WANDB_MODE=offline` then `wandb sync` |

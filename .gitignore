@@ -17,3 +17,12 @@ wandb/
 # Hand history text (regenerate via scripts/prepare_data.py)
 data/*.txt
 !data/.gitkeep
+
+# Quarto
+_site/
+.quarto/
+**/*_cache/
+**/_freeze/
+
+/.quarto/
+**/*.quarto_ipynb

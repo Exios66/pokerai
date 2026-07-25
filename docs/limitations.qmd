@@ -1,0 +1,34 @@
+---
+title: "Limitations"
+subtitle: "Known gaps and open engineering items"
+---
+
+# Current limitations
+
+| Area | Status |
+| --- | --- |
+| Class imbalance | Not yet handled (no weighted / focal loss) |
+| Checkpoint resumption | Not implemented for raw / TRL loops |
+| Condensed shorthand | POC converter passes raw HF text; compression hook is a stub |
+| Dual separators | Package uses last-comma; legacy converter uses `" => "` |
+| Evaluation suite | Loss-centric; limited action-type metrics / confusion matrices |
+| Deployment of models | Site documents the pipeline; trained weights are not shipped in git |
+
+# Open items
+
+1. **Weighted loss or resampling** for rare actions (RAISE / BET variants).
+2. **Checkpoint resume** + best-model selection by validation loss.
+3. **Finalize compressed notation** in `scripts/convert_poker_dataset.py`’s
+   `compress()` hook so tokenizer and masking share one token-efficient format.
+4. **Richer eval** — per-action accuracy, legality checks, stack-aware sizing
+   error.
+5. **Data versioning** — pin HF dataset revision hashes in config.
+
+# Operational notes
+
+- Large files (data, models, tokenizer) are excluded from git and must be
+  regenerated.
+- CUDA is strongly recommended for GPT-2 training speed.
+- Adjust batch size and learning rate for your hardware.
+- Always retrain the tokenizer after changing special tokens, then rerun
+  downstream training.

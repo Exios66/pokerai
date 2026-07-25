@@ -1,0 +1,80 @@
+---
+title: "Setup"
+subtitle: "Environment, install, and first-run checklist"
+---
+
+# Prerequisites
+
+- Python **3.10+**
+- Optional but recommended: CUDA GPU for GPT-2 training
+- Optional: [Weights & Biases](https://wandb.ai) account for experiment tracking
+
+# Install
+
+```bash
+git clone https://github.com/Exios66/pokerai.git
+cd pokerai
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"            # or: pip install -r requirements.txt && pip install -e .
+wandb login                        # optional; or WANDB_MODE=disabled
+```
+
+```{python}
+#| label: tbl-deps
+#| tbl-cap: "Core runtime dependencies declared in `pyproject.toml`."
+
+import tomllib
+from pathlib import Path
+import pandas as pd
+
+from pokerai.config import REPO_ROOT
+
+pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+deps = pyproject["project"]["dependencies"]
+pd.DataFrame({"Dependency": deps})
+```
+
+# Quick verification
+
+```bash
+python -c "from pokerai import config; print(config.HF_DATASET, config.N_LAYER)"
+pytest -q
+```
+
+# Data options
+
+Two paths into the training pipeline:
+
+1. **Public POC dataset (recommended start)** — run
+   `python scripts/prepare_data.py` (or `pokerai-prepare`) to download
+   `SoelMgd/Poker_Dataset` and write cleaned hand files.
+2. **Legacy converter** — `python scripts/convert_poker_dataset.py` writes
+   `data/hands.txt`, `hands_train.txt`, and `hands_test.txt` using a
+   `" => "` separator. If you use this path, ensure masking logic matches
+   that separator (the installable package uses last-comma splits).
+3. **Your own hands** — place lines in `data/hands.txt` using the comma-delimited
+   format documented on the [Data](data.qmd) page, then clean / split as needed.
+
+# Offline / cluster notes
+
+On CHTC or other offline nodes:
+
+```bash
+export WANDB_MODE=offline
+python scripts/train_gpt2.py
+wandb sync wandb/offline-run-*
+```
+
+# Render this site locally
+
+```bash
+quarto check
+quarto render    # writes _site/
+```
+
+Publish to Posit Connect Cloud (creates or updates the Poker AI content instance):
+
+```bash
+python scripts/publish_posit_pokerai.py
+```
