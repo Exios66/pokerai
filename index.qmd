@@ -1,0 +1,197 @@
+---
+title: "Poker AI"
+subtitle: "Training a small GPT-2 decoder to predict poker actions from serialized game state"
+author:
+  - name: Jack J. Burleson
+    url: https://github.com/Exios66
+    affiliations:
+      - University of Wisconsin–Madison
+    corresponding: true
+date: last-modified
+abstract: |
+  Poker AI trains a compact GPT-2 language model from scratch to predict legal
+  poker actions (FOLD, CALL, RAISE, CHECK, BET, …) conditioned on a serialized
+  table state. Hands are drawn from the public Hugging Face dataset
+  `SoelMgd/Poker_Dataset`, cleaned into a prompt/completion format, and
+  tokenized with a domain Byte-Pair Encoding (BPE) vocabulary. Training uses
+  completion-only (masked) loss so the model learns decision-making rather than
+  memorizing game states. A bigram baseline (~1.53 validation loss) anchors
+  whether the transformer is learning meaningful structure. The package ships
+  raw-loop and TRL trainers, Weights & Biases experiment tracking, and a CLI
+  for action prediction.
+keywords:
+  - poker
+  - GPT-2
+  - action prediction
+  - BPE tokenizer
+  - completion-only loss
+  - TRL
+  - Hugging Face
+  - Weights & Biases
+nocite: |
+  @radford2019language, @sennrich2016neural, @wolf2020transformers, @trl, @pokerdataset, @wandb, @positconnect, @github, @pokerairepo
+---
+
+::: {.github-access}
+[View repository](https://github.com/Exios66/pokerai){.github-btn}
+[Author profile · Exios66](https://github.com/Exios66){.github-btn}
+:::
+
+# Introduction
+
+Poker decision-making is a sequential prediction problem: given the public board,
+stacks, positions, and prior betting action, choose the next action. This project
+casts that problem as **causal language modeling** over a compact, domain-specific
+token vocabulary [@radford2019language; @pokerdataset].
+
+The model never sees free-form English strategy text. Instead, each training
+example is a single line:
+
+```
+<table state …>[PREFLOP] … P1:,FOLD
+```
+
+Everything up to the final comma is the **prompt** (game state). Everything after
+is the **completion** (hero action). Loss is applied only to completion tokens,
+so gradients push the network to predict actions—not to reconstruct the table.
+
+## Research & engineering goals
+
+::: {.pipeline-block}
+### Primary goals
+
+| ID | Goal | Success looks like |
+| --- | --- | --- |
+| G1 | Learn action distributions from public hand histories | GPT-2 validation loss clearly beats the bigram baseline (~1.53) |
+| G2 | Keep training cheap and reproducible | Small GPT-2 (6×256×8), domain BPE (≈4k), shared W&B project |
+| G3 | Avoid prompt/mask misalignment under BPE | Boundary located from a single full-text (or carefully split) tokenize pass |
+| G4 | Ship a usable inference path | `pokerai-predict "<state>"` returns a decoded action string |
+
+:::
+
+# Methods snapshot
+
+## Data
+
+Hands come from Hugging Face [`SoelMgd/Poker_Dataset`](https://huggingface.co/datasets/SoelMgd/Poker_Dataset)
+[@pokerdataset]. Each row has a `question` (table state ending at the hero
+decision) and an `answer` (action label). The package flattens multiline states,
+joins with a comma separator, and normalizes noisy suffixes such as `CALL 0BB`
+→ `CALL` and legacy `FOLD0BB` → `FOLD`.
+
+```{python}
+#| label: setup-config
+#| include: false
+
+from __future__ import annotations
+
+import pandas as pd
+
+from pokerai import config
+from pokerai.data import clean_line, split_prompt_completion, to_line
+```
+
+```{python}
+#| label: tbl-hyperparams
+#| tbl-cap: "Default model and training hyperparameters from `pokerai.config`."
+
+pd.DataFrame(
+    [
+        {"Setting": "Architecture", "Value": "GPT-2 (random init)"},
+        {"Setting": "Layers / hidden / heads", "Value": f"{config.N_LAYER} / {config.N_EMBD} / {config.N_HEAD}"},
+        {"Setting": "Context length", "Value": f"{config.N_POSITIONS} tokens"},
+        {"Setting": "Vocab target", "Value": f"{config.VOCAB_SIZE} (+ specials)"},
+        {"Setting": "Special tokens", "Value": f"{config.BOS_TOKEN}, {config.EOS_TOKEN}, {config.PAD_TOKEN}"},
+        {"Setting": "Optimizer / LR", "Value": f"AdamW / {config.GPT2_LR}"},
+        {"Setting": "Epochs / batch", "Value": f"{config.GPT2_EPOCHS} / {config.GPT2_BATCH_SIZE}"},
+        {"Setting": "Train/val split", "Value": f"{1 - config.TEST_SIZE:.0%} / {config.TEST_SIZE:.0%} (seed {config.SPLIT_SEED})"},
+        {"Setting": "HF dataset", "Value": config.HF_DATASET},
+        {"Setting": "W&B project", "Value": config.WANDB_PROJECT},
+    ]
+)
+```
+
+## Tokenizer
+
+A Byte-Level BPE tokenizer [@sennrich2016neural] is trained on the poker corpus
+with target vocabulary size 4000 plus distinct BOS / EOS / PAD specials. BOS and
+EOS **must** be distinct—if they share an ID, the model cannot separate hand
+start from hand end.
+
+## Models
+
+1. **Bigram baseline** — next-token table trained only on supervised
+   (action-region) transitions. Expected validation loss ≈ 1.53. If GPT-2 does
+   not beat this, something upstream (tokenizer, masking, data format) is broken.
+2. **GPT-2 (raw loop)** — Hugging Face `GPT2LMHeadModel` with a custom PyTorch
+   loop and action-only labels (`-100` on prompt tokens).
+3. **GPT-2 (TRL)** — same architecture via Hugging Face TRL `SFTTrainer` with
+   `completion_only_loss=True` [@trl; @wolf2020transformers].
+
+## Masked / completion-only loss
+
+```{python}
+#| label: demo-mask
+#| code-fold: true
+#| code-summary: "Show prompt/completion split on a toy hand"
+
+example = to_line(
+    "[TABLE_CONFIGURATION] BTN=P3 SB=P1 0.5BB BB=P2 1BB "
+    "[STACKS] P1: 44.2BB [Qh 9h] P2: 103.4BB P3: 165.2BB POT=1.5BB "
+    "[PREFLOP] P3: RAISE 2BB P1:",
+    "FOLD",
+)
+cleaned = clean_line(example)
+prompt, completion = split_prompt_completion(cleaned)
+pd.DataFrame(
+    [
+        {"Field": "Full line (truncated)", "Value": cleaned[:120] + "…"},
+        {"Field": "Prompt ends with", "Value": repr(prompt[-24:])},
+        {"Field": "Completion", "Value": completion},
+    ]
+)
+```
+
+# Pipeline at a glance
+
+::: {.pipeline-block}
+### End-to-end commands
+
+| Step | Command | Output |
+| --- | --- | --- |
+| 1. Fetch & clean | `python scripts/prepare_data.py` | `data/hands.txt`, `data/hands_clean.txt` |
+| 2. Train tokenizer | `python scripts/train_tokenizer.py` | `artifacts/tokenizer/` |
+| 3. Bigram baseline | `python scripts/train_bigram.py` | `artifacts/models/bigram/` |
+| 4a. GPT-2 (raw) | `python scripts/train_gpt2.py` | `artifacts/models/gpt2/` |
+| 4b. GPT-2 (TRL) | `python scripts/train_trl.py` | `artifacts/models/gpt2_trl/` |
+| 5. Predict | `python scripts/predict.py "<state>"` | printed action |
+
+After `pip install -e .` the console scripts `pokerai-prepare`, `pokerai-tokenizer`,
+`pokerai-bigram`, `pokerai-gpt2`, `pokerai-trl`, and `pokerai-predict` are also available.
+:::
+
+# Site map
+
+| Page | Contents |
+| --- | --- |
+| [Setup](docs/setup.qmd) | Clone, venv, install, W&B login |
+| [Data](docs/data.qmd) | HF fetch, cleaning, formats, converters |
+| [Tokenizer](docs/tokenizer.qmd) | BPE training, specials, length diagnostics |
+| [Models](docs/models.qmd) | Bigram + GPT-2 factory |
+| [Training](docs/training.qmd) | Raw loop, TRL, masking details |
+| [Inference](docs/inference.qmd) | Action prediction CLI |
+| [Architecture](docs/architecture.qmd) | Package layout and design notes |
+| [Package API](docs/api.qmd) | Config, data, models, training, inference |
+| [Tracking](docs/tracking.qmd) | Weights & Biases project layout |
+| [Limitations](docs/limitations.qmd) | Open items and known gaps |
+
+# Repository
+
+Source and issue tracker: [github.com/Exios66/pokerai](https://github.com/Exios66/pokerai)
+[@pokerairepo]. Large artifacts (data, tokenizer, models) are gitignored and
+regenerated by the pipeline scripts.
+
+# References
+
+::: {#refs}
+:::

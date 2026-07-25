@@ -1,0 +1,126 @@
+project:
+  type: website
+  output-dir: _site
+  render:
+    - index.qmd
+    - docs/setup.qmd
+    - docs/data.qmd
+    - docs/tokenizer.qmd
+    - docs/models.qmd
+    - docs/training.qmd
+    - docs/inference.qmd
+    - docs/tracking.qmd
+    - docs/architecture.qmd
+    - docs/api.qmd
+    - docs/limitations.qmd
+
+website:
+  title: "Poker AI"
+  description: "Train a small GPT-2 decoder to predict poker actions from serialized game state"
+  site-url: https://connect.posit.cloud/jackjburleson/content/019f9a68-2304-5291-83c1-e2b9574e723d
+  repo-url: https://github.com/Exios66/pokerai
+  repo-actions: [source, issue]
+  page-navigation: true
+  navbar:
+    background: "#C5050C"
+    foreground: white
+    left:
+      - href: index.qmd
+        text: Overview
+      - text: Pipeline
+        menu:
+          - href: docs/setup.qmd
+            text: Setup
+          - href: docs/data.qmd
+            text: Data
+          - href: docs/tokenizer.qmd
+            text: Tokenizer
+          - href: docs/models.qmd
+            text: Models
+          - href: docs/training.qmd
+            text: Training
+          - href: docs/inference.qmd
+            text: Inference
+      - text: Reference
+        menu:
+          - href: docs/architecture.qmd
+            text: Architecture
+          - href: docs/api.qmd
+            text: Package API
+          - href: docs/tracking.qmd
+            text: Experiment tracking
+          - href: docs/limitations.qmd
+            text: Limitations
+    right:
+      - icon: github
+        href: https://github.com/Exios66/pokerai
+        aria-label: GitHub repository Exios66/pokerai
+      - icon: github
+        href: https://github.com/Exios66
+        text: Exios66
+        aria-label: GitHub profile Exios66
+  page-footer:
+    left: "Poker AI · GPT-2 action prediction · UW–Madison"
+    right:
+      - text: "Built with Quarto"
+      - icon: github
+        href: https://github.com/Exios66/pokerai
+        aria-label: GitHub repository
+      - icon: github
+        href: https://github.com/Exios66
+        text: Exios66
+        aria-label: GitHub profile Exios66
+  sidebar:
+    style: "floating"
+    contents:
+      - section: "Project"
+        contents:
+          - index.qmd
+      - section: "Pipeline"
+        contents:
+          - docs/setup.qmd
+          - docs/data.qmd
+          - docs/tokenizer.qmd
+          - docs/models.qmd
+          - docs/training.qmd
+          - docs/inference.qmd
+      - section: "Reference"
+        contents:
+          - docs/architecture.qmd
+          - docs/api.qmd
+          - docs/tracking.qmd
+          - docs/limitations.qmd
+
+crossref:
+  fig-title: "Figure"
+  tbl-title: "Table"
+  title-delim: "."
+
+format:
+  html:
+    theme:
+      - cosmo
+      - styles.scss
+    toc: true
+    toc-depth: 3
+    toc-location: right
+    number-sections: true
+    code-fold: true
+    code-tools: true
+    code-link: true
+    df-print: paged
+    link-external-newwindow: true
+    smooth-scroll: true
+    citations-hover: true
+    footnotes-hover: true
+    fig-cap-location: bottom
+    tbl-cap-location: top
+
+execute:
+  echo: true
+  warning: false
+  message: false
+  freeze: auto
+
+bibliography: references.bib
+csl: https://www.zotero.org/styles/apa

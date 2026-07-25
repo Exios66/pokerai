@@ -1,0 +1,63 @@
+---
+title: "Architecture"
+subtitle: "Package layout and design decisions"
+---
+
+# Repository layout
+
+```
+pokerai/
+├── src/pokerai/           # installable package
+│   ├── config.py          # paths + hyperparameters
+│   ├── data/              # fetch, clean, tokenize, encode/mask
+│   ├── models/            # Bigram + GPT-2 factory
+│   ├── training/          # bigram / gpt2 / trl trainers
+│   └── inference/         # action prediction
+├── scripts/               # thin CLI wrappers (+ Posit publish helper)
+├── tests/                 # unit tests for cleaning & masking
+├── docs/                  # Quarto reference pages (this site)
+├── data/                  # hand text only (gitignored)
+├── artifacts/             # tokenizer + models (gitignored)
+├── index.qmd              # site home / manuscript overview
+├── _quarto.yml            # Quarto website project
+└── references.bib         # shared bibliography
+```
+
+# Design principles
+
+| Principle | How it shows up |
+| --- | --- |
+| Single source of truth for knobs | `pokerai.config` constants + `GPT2Hyperparams` |
+| Thin CLIs | `scripts/*.py` call into package `main()` functions |
+| Fair baselines | Bigram trained only on action-region pairs |
+| Mask safety | Prompt/completion split before BPE encode |
+| Reproducible splits | `SPLIT_SEED = 42`, `TEST_SIZE = 0.05` |
+| Comparable runs | Shared W&B project name `pokerai` |
+
+# Console entry points
+
+Declared in `pyproject.toml`:
+
+| Script | Module |
+| --- | --- |
+| `pokerai-prepare` | `pokerai.data.prepare:main` |
+| `pokerai-tokenizer` | `pokerai.data.tokenizer:main` |
+| `pokerai-bigram` | `pokerai.training.train_bigram:main` |
+| `pokerai-gpt2` | `pokerai.training.train_gpt2:main` |
+| `pokerai-trl` | `pokerai.training.train_trl:main` |
+| `pokerai-predict` | `pokerai.inference:main` |
+
+# What is not committed
+
+`.gitignore` excludes regenerated / large artifacts:
+
+- `data/*.txt` (except `.gitkeep`)
+- `artifacts/`, `tokenizer/`, `model_out_trl/`
+- `wandb/`, virtualenvs, caches
+
+# Quarto site
+
+This documentation site is a Quarto website (`project: type: website`) styled
+similarly to other JackJBurleson Posit Connect Cloud publications: UW crimson
+navbar, floating sidebar, numbered sections, foldable code, APA-style
+captions, and a shared BibTeX bibliography.

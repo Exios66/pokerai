@@ -1,0 +1,121 @@
+---
+title: "Data"
+subtitle: "Fetching, cleaning, and formatting poker hand histories"
+---
+
+# Source dataset
+
+Training hands are downloaded from Hugging Face
+[`SoelMgd/Poker_Dataset`](https://huggingface.co/datasets/SoelMgd/Poker_Dataset).
+Each example is a `(question, answer)` pair:
+
+| Field | Role |
+| --- | --- |
+| `question` | Serialized table state ending at the hero decision point |
+| `answer` | Action label (`FOLD`, `CALL 2BB`, `RAISE 3BB`, `CHECK`, `BET 4BB`, …) |
+
+# Canonical line format
+
+The installable package joins question and answer with a **comma**, after
+collapsing whitespace/newlines:
+
+```{python}
+#| label: demo-to-line
+#| code-fold: true
+
+from pokerai.data import to_line, clean_line, split_prompt_completion
+import pandas as pd
+
+raw_q = """[TABLE_CONFIGURATION] BTN=P3 SB=P1 0.5BB BB=P2 1BB
+[STACKS] P1: 44.2BB [Qh 9h] P2: 103.4BB P3: 165.2BB POT=1.5BB
+[PREFLOP] P3: RAISE 2BB P1:"""
+line = to_line(raw_q, "FOLD")
+pd.DataFrame([{"Line": line}])
+```
+
+Example (truncated):
+
+```
+[TABLE_CONFIGURATION] BTN=P3 SB=P1 0.5BB BB=P2 1BB [STACKS] P1: 44.2BB [Qh 9h] … [PREFLOP] P3: RAISE 2BB P1:,FOLD
+```
+
+The **last comma** is the prompt/completion boundary used by masking and TRL
+prompt mapping.
+
+# Cleaning rules
+
+```{python}
+#| label: tbl-cleaning
+#| tbl-cap: "Deterministic cleaning transforms applied by `pokerai.data.clean_line`."
+
+from pokerai.data import clean_line
+import pandas as pd
+
+rows = [
+    ("CALL 0BB noise", "state,CALL 0BB", clean_line("state,CALL 0BB")),
+    ("Legacy FOLD amount", "state,FOLD0BB", clean_line("state,FOLD0BB")),
+    ("Already clean FOLD", "state,FOLD", clean_line("state,FOLD")),
+    ("CALL with chips", "state,CALL 2BB", clean_line("state,CALL 2BB")),
+]
+pd.DataFrame(rows, columns=["Case", "Input", "Output"])
+```
+
+Rationale:
+
+- `CALL 0BB` is noise (no chips committed) → normalize to `CALL`
+- `FOLD` never carries an amount in this dataset → strip legacy `FOLDxBB`
+
+# Prepare script
+
+```bash
+python scripts/prepare_data.py
+# or: pokerai-prepare
+```
+
+Writes:
+
+| File | Description |
+| --- | --- |
+| `data/hands.txt` | Combined raw lines from all HF splits |
+| `data/hands_clean.txt` | Cleaned lines used by tokenizer consumers / trainers |
+
+`load_text_split()` then creates a 95% / 5% train/test split with seed 42
+(configurable via `TEST_SIZE` / `SPLIT_SEED` in `pokerai.config`).
+
+# Legacy converter
+
+`scripts/convert_poker_dataset.py` is an alternate POC path that:
+
+1. Downloads the same HF dataset
+2. Joins with separator `" => "` instead of comma
+3. Writes `hands.txt`, `hands_train.txt`, `hands_test.txt`
+4. Prints action-type distribution (FOLD / CALL / RAISE / …) for class-imbalance checks
+
+::: {.callout-warning}
+## Separator must match masking
+
+If you switch between the comma-delimited package path and the `" => "` converter,
+make sure the masking / prompt-split logic matches the format that produced your
+`hands_*.txt` files. The published package API (`split_prompt_completion`)
+splits on the **last comma**.
+:::
+
+# Custom hand histories
+
+If bringing your own data, one compatible shorthand format is:
+
+```
+BTN,1.5BB,9d 10c,P1:101.0BB/0.0BB,P2:100.23BB/0.0BB,FOLD
+```
+
+Place lines in `data/hands.txt` and run the cleaning / split steps before
+tokenizer training.
+
+# Unit tests
+
+`tests/test_data.py` covers:
+
+- whitespace flattening in `to_line`
+- `CALL 0BB` / `FOLD0BB` cleaning
+- last-comma prompt/completion split
+- action-only label masking and front-truncation behavior

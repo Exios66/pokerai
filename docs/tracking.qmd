@@ -1,0 +1,53 @@
+---
+title: "Experiment tracking"
+subtitle: "Weights & Biases project layout for comparable runs"
+---
+
+# Shared project
+
+All training scripts log to the W&B project named **`pokerai`**
+(`pokerai.config.WANDB_PROJECT`).
+
+| Run name | Trainer | How W&B is wired |
+| --- | --- | --- |
+| `bigram-baseline` | `train_bigram` | Direct `wandb.init` / `wandb.log` |
+| `gpt2-raw` | `train_gpt2` | Direct `wandb.init` / `wandb.log` |
+| `gpt2-trl` | `train_trl` | `TrainingArguments(report_to="wandb")` |
+
+This makes validation curves directly comparable in one dashboard.
+
+# What gets logged
+
+Typical configs include:
+
+- architecture sizes (`n_layer`, `n_embd`, `n_head`, `n_positions`)
+- vocab size / parameter count
+- batch size, learning rate, epochs / steps
+- device string
+- train/eval example or pair counts
+- masked-action-only flag (bigram)
+
+# Login & offline modes
+
+```bash
+wandb login
+# or disable entirely:
+export WANDB_MODE=disabled
+```
+
+On air-gapped / batch compute:
+
+```bash
+export WANDB_MODE=offline
+python scripts/train_gpt2.py
+wandb sync wandb/offline-run-*
+```
+
+# Interpreting results
+
+- **Bigram baseline** ≈ 1.53 val loss is the floor you must beat.
+- Poker datasets are often **FOLD-heavy**. Raw CE loss can look strong while
+  RAISE / BET quality remains poor—check action-type distribution from the
+  converter / prepare step before over-interpreting.
+- Prefer head-to-head comparison of TRL vs raw loop under identical data,
+  tokenizer, and seed.

@@ -2,6 +2,19 @@
 
 Train a small GPT-2 decoder to predict poker actions (FOLD, CALL, RAISE, …) from a serialized game state. Loss is applied only to the action tokens (completion-only / masked training).
 
+## Live site (Posit Connect Cloud)
+
+**Public URL:** https://019f9a68-2304-5291-83c1-e2b9574e723d.share.connect.posit.cloud/
+
+Dashboard: https://connect.posit.cloud/jackjburleson/content/019f9a68-2304-5291-83c1-e2b9574e723d
+
+The Quarto documentation site covers the full pipeline (setup, data, tokenizer, models, training, inference, architecture, API, W&B tracking, and limitations). To re-render and republish:
+
+```bash
+quarto render
+python scripts/publish_posit_pokerai.py --skip-render --content-id 019f9a68-2304-5291-83c1-e2b9574e723d
+```
+
 ## Setup
 
 1. **Clone the repository**

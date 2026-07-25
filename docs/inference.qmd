@@ -1,0 +1,62 @@
+---
+title: "Inference"
+subtitle: "Predicting a poker action from a serialized game state"
+---
+
+# CLI
+
+```bash
+python scripts/predict.py "<serialized game state>"
+# or: pokerai-predict "<state>"
+# or pipe / interactive:
+pokerai-predict
+```
+
+Optional `--model` path selects a checkpoint directory. Default preference:
+
+1. `artifacts/models/gpt2_trl/` if present
+2. else `artifacts/models/gpt2/`
+
+# API
+
+```{python}
+#| label: show-predict-sig
+#| echo: true
+#| eval: false
+
+from pathlib import Path
+from pokerai.inference import load_model, predict_action
+
+model, tokenizer = load_model(Path("artifacts/models/gpt2_trl"))
+state = (
+    "[TABLE_CONFIGURATION] BTN=P3 SB=P1 0.5BB BB=P2 1BB "
+    "[STACKS] P1: 44.2BB [Qh 9h] P2: 103.4BB P3: 165.2BB POT=1.5BB "
+    "[PREFLOP] P3: RAISE 2BB P1:"
+)
+print(predict_action(state, model, tokenizer))
+```
+
+# Generation details
+
+`predict_action`:
+
+1. Ensures the prompt ends with a comma (decision separator)
+2. Prepends BOS and truncates from the front if needed to leave room for
+   `max_new_tokens` (default 16) within `N_POSITIONS`
+3. Runs greedy `model.generate` (`do_sample=False`) stopping at EOS
+4. Decodes newly generated tokens with `skip_special_tokens=True`
+
+# Expected outputs
+
+Typical completions look like:
+
+- `FOLD`
+- `CALL`
+- `CALL 2BB`
+- `RAISE 3BB`
+- `CHECK`
+- `BET 4BB`
+
+Quality depends entirely on having trained a checkpoint first. Without
+`artifacts/models/…`, the CLI raises `FileNotFoundError` with a pointer to the
+training scripts.
