@@ -17,7 +17,9 @@ End-to-end workflow for this repo (`pokerai`): **update docs → `quarto render`
 | Field | Value |
 |---|---|
 | Account | `jackjburleson` |
-| Content | **Create new** via `scripts/publish_posit_pokerai.py` (writes `_publish.yml`) |
+| Content ID | `019f9a68-2304-5291-83c1-e2b9574e723d` |
+| Dashboard | https://connect.posit.cloud/jackjburleson/content/019f9a68-2304-5291-83c1-e2b9574e723d |
+| Public share URL | https://019f9a68-2304-5291-83c1-e2b9574e723d.share.connect.posit.cloud/ |
 | Protected (do not overwrite) | `019f9a10-ebb9-d1d5-839f-97e794bfd0ca` (psych755 manuscript) |
 | Config | `_publish.yml`, `_quarto.yml` |
 
@@ -52,27 +54,23 @@ Device-code flow (client_id `quarto-cli`, scope `vivid`):
 3. Poll `https://login.posit.cloud/oauth/token`
 4. Confirm authorized account is **`jackjburleson`**
 
-### 4. Publish (NEW instance by default)
+### 4. Publish
+
+Update the existing Poker AI deployment (preferred after first publish):
 
 ```bash
-python scripts/publish_posit_pokerai.py
+python scripts/publish_posit_pokerai.py --content-id 019f9a68-2304-5291-83c1-e2b9574e723d
 # or skip re-render:
-python scripts/publish_posit_pokerai.py --skip-render
+python scripts/publish_posit_pokerai.py --skip-render --content-id 019f9a68-2304-5291-83c1-e2b9574e723d
 ```
 
-The helper:
+Omit `--content-id` only when intentionally creating another new instance. The helper:
 
-1. `POST /v1/contents` to create a **new** static content item
+1. Creates (`POST /v1/contents`) or updates (`PATCH …?new_bundle=true`) content
 2. Uploads `_site` as a gzip bundle
 3. `POST /v1/contents/{id}/publish`
-4. Writes `_publish.yml` with the new id
+4. Writes `_publish.yml`
 5. Verifies the `.share.connect.posit.cloud` URL
-
-To update an existing Poker AI deployment later:
-
-```bash
-python scripts/publish_posit_pokerai.py --content-id <pokerai-content-id>
-```
 
 ### 5. Verify
 

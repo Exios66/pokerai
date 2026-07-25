@@ -17,6 +17,7 @@ project:
 website:
   title: "Poker AI"
   description: "Train a small GPT-2 decoder to predict poker actions from serialized game state"
+  site-url: https://connect.posit.cloud/jackjburleson/content/019f9a68-2304-5291-83c1-e2b9574e723d
   repo-url: https://github.com/Exios66/pokerai
   repo-actions: [source, issue]
   page-navigation: true
