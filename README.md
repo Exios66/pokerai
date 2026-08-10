@@ -6,8 +6,6 @@ Train a small GPT-2 decoder to predict poker actions (FOLD, CALL, RAISE, …) fr
 
 **Public URL:** https://019f9a68-2304-5291-83c1-e2b9574e723d.share.connect.posit.cloud/
 
-Dashboard: https://connect.posit.cloud/jackjburleson/content/019f9a68-2304-5291-83c1-e2b9574e723d
-
 The Quarto documentation site covers the full pipeline (setup, data, tokenizer, models, training, inference, architecture, API, W&B tracking, and limitations). To re-render and republish:
 
 ```bash
